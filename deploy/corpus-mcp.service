@@ -15,6 +15,8 @@ Environment=CORPUS_MCP_PORT=@PORT@
 Environment=CORPUS_MCP_ALLOWED_HOSTS=127.0.0.1:*,localhost:*,@PUBLIC_HOST@,@PUBLIC_HOST@:*
 Environment=CORPUS_MCP_ALLOWED_ORIGINS=https://@PUBLIC_HOST@
 Environment=HF_HOME=@BASE@/data/hf
+# 1 when the embedding model is already in data/hf (then the server never contacts huggingface.co)
+Environment=HF_HUB_OFFLINE=@HF_OFFLINE@
 Environment=OMP_NUM_THREADS=4
 ExecStart=@BASE@/app/.venv/bin/python -m genericCorpusMcpBuilder serve
 Restart=on-failure

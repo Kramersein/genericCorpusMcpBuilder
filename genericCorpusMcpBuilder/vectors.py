@@ -16,6 +16,7 @@ MAX_SEQUENCE_TOKENS = 512
 MAX_PASSAGE_CHARS = 1200
 BATCH_SIZE = 16
 CHECKPOINT_EVERY = 2048
+SCORE_CHUNK = 16384
 
 
 def is_embedded_work(title: str, categories: list[str], dependence: str | None, settings: dict) -> bool:
@@ -155,6 +156,20 @@ def build_topic_vectors(corpus_path: str, out_dir: str) -> None:
     print(f"{len(rows)} topic vectors", flush=True)
 
 
+def write_float32(vectors_dir: str) -> None:
+    """vectors.f32 next to vectors.f16: what the server memory-maps for fast search."""
+    directory = Path(vectors_dir)
+    meta = json.loads((directory / "vectors.json").read_text())
+    stored = np.memmap(directory / "vectors.f16", dtype=np.float16, mode="r", shape=(meta["count"], meta["dimensions"]))
+    out = np.memmap(directory / "vectors.f32.part", dtype=np.float32, mode="w+", shape=stored.shape)
+    for start in range(0, len(stored), SCORE_CHUNK):
+        out[start:start + SCORE_CHUNK] = stored[start:start + SCORE_CHUNK]
+    out.flush()
+    del out
+    (directory / "vectors.f32.part").rename(directory / "vectors.f32")
+    print(f"wrote vectors.f32 ({stored.shape[0]} x {stored.shape[1]})", flush=True)
+
+
 def locate_passages(corpus_path: str, vectors_dir: str) -> None:
     from genericCorpusMcpBuilder.corpus import Corpus, RefNotFound
 
@@ -178,21 +193,32 @@ def locate_passages(corpus_path: str, vectors_dir: str) -> None:
     meta["located_for_build"] = corpus.build_id
     meta_path.write_text(json.dumps(meta))
     print(f"located {len(located)} passages for build {corpus.build_id}; {missing} not found", flush=True)
+    write_float32(vectors_dir)
 
 
 class SemanticIndex:
     def __init__(self, vectors_dir: str, corpus_build: str | None = None):
         directory = Path(vectors_dir)
         meta = json.loads((directory / "vectors.json").read_text())
-        stored = np.memmap(directory / "vectors.f16", dtype=np.float16, mode="r", shape=(meta["count"], meta["dimensions"]))
-        self.vectors = np.ascontiguousarray(stored, dtype=np.float32)
+        # Memory-mapped, not copied into the process: the OS pages the vectors in and can drop them again under
+        # memory pressure. vectors.f32 (written by the build) is used directly; without it, float16 is converted
+        # a chunk at a time per query (about 10x slower search).
+        shape = (meta["count"], meta["dimensions"])
+        f32 = directory / "vectors.f32"
+        if f32.exists() and f32.stat().st_size == shape[0] * shape[1] * 4:
+            self.vectors = np.memmap(f32, dtype=np.float32, mode="r", shape=shape)
+        else:
+            self.vectors = np.memmap(directory / "vectors.f16", dtype=np.float16, mode="r", shape=shape)
         self.passages = sqlite3.connect(f"file:{directory / 'passages.db'}?mode=ro&immutable=1", uri=True,
                                         check_same_thread=False)
         self.passages.row_factory = sqlite3.Row
-        rows = self.passages.execute("SELECT * FROM passages ORDER BY id").fetchall()
+        columns = {row[1] for row in self.passages.execute("PRAGMA table_info(passages)")}
+        self.located = (corpus_build is not None and meta.get("located_for_build") == corpus_build
+                        and {"loc_start", "loc_end"} <= columns)
+        wanted = "category, lang" + (", loc_start, loc_end" if self.located else "")
+        rows = self.passages.execute(f"SELECT {wanted} FROM passages ORDER BY id").fetchall()   # not the texts
         self.categories = np.array([r["category"] for r in rows])
         self.languages = [r["lang"] for r in rows]
-        self.located = corpus_build is not None and meta.get("located_for_build") == corpus_build
         if self.located:
             self.loc_start = np.array([r["loc_start"] if r["loc_start"] is not None else -1 for r in rows])
             self.loc_end = np.array([r["loc_end"] if r["loc_end"] is not None else -2 for r in rows])
@@ -222,7 +248,14 @@ class SemanticIndex:
     def scores(self, query: str) -> np.ndarray:
         vector = self.embed(query)
         if self.cached_scores is None:
-            self.cached_scores = self.vectors @ vector
+            if self.vectors.dtype == np.float32:
+                self.cached_scores = np.asarray(self.vectors @ vector)
+            else:
+                scores = np.empty(len(self.vectors), dtype=np.float32)
+                for start in range(0, len(self.vectors), SCORE_CHUNK):    # float16 -> float32 a chunk at a time
+                    chunk = self.vectors[start:start + SCORE_CHUNK]
+                    scores[start:start + len(chunk)] = chunk.astype(np.float32) @ vector
+                self.cached_scores = scores
         return self.cached_scores
 
     def search_topics(self, query: str, limit: int = 5) -> list[tuple[str, float]]:

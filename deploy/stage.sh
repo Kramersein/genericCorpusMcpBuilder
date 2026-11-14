@@ -23,7 +23,7 @@ cp "$DATA/corpus.db" "$SHARE/data/corpus.db"
 if [ -f "$DATA/vectors/vectors.json" ]; then
     mkdir -p "$SHARE/data/vectors"
     cp "$DATA/vectors/vectors.f16" "$DATA/vectors/vectors.json" "$DATA/vectors/passages.db" "$SHARE/data/vectors/"
-    for extra in topics.npy topics.json; do
+    for extra in topics.npy topics.json vectors.f32; do
         [ -f "$DATA/vectors/$extra" ] && cp "$DATA/vectors/$extra" "$SHARE/data/vectors/"
     done
     for hf in "${HF_HOME:-}" "$HOME/.cache/huggingface" "$PROJECT/.tools/hf"; do

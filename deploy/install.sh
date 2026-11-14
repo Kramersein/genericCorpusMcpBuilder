@@ -97,7 +97,9 @@ if [ -f /etc/systemd/system/torahMcp.service ]; then     # the service's name be
     systemctl disable --now torahMcp.service || true
     rm -f /etc/systemd/system/torahMcp.service
 fi
-sed -e "s#@BASE@#$BASE#g" -e "s#@PORT@#$PORT#g" -e "s#@PUBLIC_HOST@#$PUBLIC_HOST#g" \
+HF_OFFLINE=0
+[ -d "$DATA/hf/hub/models--BAAI--bge-m3" ] && HF_OFFLINE=1     # staged with the data: no need to go online
+sed -e "s#@BASE@#$BASE#g" -e "s#@PORT@#$PORT#g" -e "s#@PUBLIC_HOST@#$PUBLIC_HOST#g" -e "s#@HF_OFFLINE@#$HF_OFFLINE#g" \
     "$BUNDLE/deploy/corpus-mcp.service" > /etc/systemd/system/corpus-mcp.service
 chmod 644 /etc/systemd/system/corpus-mcp.service
 systemctl daemon-reload

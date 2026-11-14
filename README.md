@@ -82,7 +82,9 @@ converting again (`corpus-mcp build --corpus data/corpus`).
 It can live anywhere: pass `--data DIR` or set `CORPUS_MCP_DATA` (default `./data`). The embedding model
 (`BAAI/bge-m3`, ~2 GB) is downloaded on first use into the Hugging Face cache (`HF_HOME`, default `~/.cache/huggingface`).
 
-Plan for ~25 GB free disk while building and ~4-6 GB RAM when serving with semantic search (~1 GB without).
+Plan for ~25 GB free disk while building. Serving Sefaria with semantic search takes about 0.8 GB of memory of its
+own (the embedding model) plus whatever of the model, vector and database files the system keeps cached; that cache
+is reclaimable, so `systemctl status` showing several GB is not a problem. Without semantic search, ~0.1 GB.
 
 ### Sources and the corpus format
 
