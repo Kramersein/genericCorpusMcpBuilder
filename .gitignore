@@ -1,0 +1,26 @@
+# Built corpora and downloads: rebuild with `corpus-mcp build` (several GB each)
+/data/
+/data-*/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Local tool installs: uv, its Python and caches, Hugging Face models
+/.tools/
+
+# Partial downloads and logs
+*.part
+*.log
+
+# Local settings and secrets
+.env
+.claude/settings.local.json
+.idea/
+.vscode/
+.DS_Store

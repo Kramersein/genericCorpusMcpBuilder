@@ -1,0 +1,57 @@
+# docker compose up -d                 serve http://127.0.0.1:8765/mcp from $CORPUS_MCP_DATA_DIR (default ./data)
+# docker compose run --rm builder      download Sefaria's export and build the data directory (hours)
+#                                      (CORPUS_MCP_SOURCE=perseus for Greek and Latin texts, a few minutes)
+# docker compose --profile https up -d   also start Caddy: HTTPS on https://$CORPUS_MCP_DOMAIN/mcp (see README)
+#
+# Settings go in the environment or in a .env file next to this one, e.g.
+#   CORPUS_MCP_DATA_DIR=/srv/torah-data
+#   CORPUS_MCP_PORT=8765
+#   CORPUS_MCP_ALLOWED_HOSTS=127.0.0.1:*,localhost:*,mcp.example.org   (when behind a reverse proxy)
+x-image: &image
+  build: .
+  image: corpus-mcp
+  platform: linux/amd64   # the lockfile targets linux x86_64; on Apple silicon this runs under emulation
+
+services:
+  corpus-mcp:
+    <<: *image
+    ports:
+      - "${CORPUS_MCP_BIND:-127.0.0.1}:${CORPUS_MCP_PORT:-8765}:8765"
+    volumes:
+      - ${CORPUS_MCP_DATA_DIR:-./data}:/data:ro
+      - model-cache:/cache
+    environment:
+      CORPUS_MCP_ALLOWED_HOSTS: ${CORPUS_MCP_ALLOWED_HOSTS:-127.0.0.1:*,localhost:*}
+      CORPUS_MCP_ALLOWED_ORIGINS: ${CORPUS_MCP_ALLOWED_ORIGINS:-}
+      OMP_NUM_THREADS: ${OMP_NUM_THREADS:-4}
+    restart: unless-stopped
+
+  builder:
+    <<: *image
+    profiles: ["build"]
+    command: ["build", "--source", "${CORPUS_MCP_SOURCE:-sefaria}", "--delete-raw"]
+    volumes:
+      - ${CORPUS_MCP_DATA_DIR:-./data}:/data
+      - model-cache:/cache
+
+  caddy:
+    image: caddy:2
+    profiles: ["https"]
+    depends_on: [corpus-mcp]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data          # certificates and Caddy's local CA; keep this volume
+      - caddy-config:/config
+    environment:
+      CORPUS_MCP_DOMAIN: ${CORPUS_MCP_DOMAIN:-localhost}
+      CORPUS_MCP_CERT_ISSUER: ${CORPUS_MCP_CERT_ISSUER:-internal}
+      CORPUS_MCP_ALLOW_FROM: ${CORPUS_MCP_ALLOW_FROM:-private_ranges}
+    restart: unless-stopped
+
+volumes:
+  model-cache:
+  caddy-data:
+  caddy-config:

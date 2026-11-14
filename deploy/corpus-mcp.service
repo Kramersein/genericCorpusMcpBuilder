@@ -1,0 +1,31 @@
+# Template: install.sh replaces @BASE@, @PORT@ and @PUBLIC_HOST@.
+[Unit]
+Description=corpus-mcp - MCP server over the indexed Sefaria corpus
+After=network.target
+
+[Service]
+Type=simple
+User=corpusmcp
+Group=corpusmcp
+WorkingDirectory=@BASE@/app
+Environment=CORPUS_MCP_DATA=@BASE@/data
+Environment=CORPUS_MCP_TRANSPORT=http
+Environment=CORPUS_MCP_HOST=127.0.0.1
+Environment=CORPUS_MCP_PORT=@PORT@
+Environment=CORPUS_MCP_ALLOWED_HOSTS=127.0.0.1:*,localhost:*,@PUBLIC_HOST@,@PUBLIC_HOST@:*
+Environment=CORPUS_MCP_ALLOWED_ORIGINS=https://@PUBLIC_HOST@
+Environment=HF_HOME=@BASE@/data/hf
+Environment=OMP_NUM_THREADS=4
+ExecStart=@BASE@/app/.venv/bin/python -m genericCorpusMcpBuilder serve
+Restart=on-failure
+RestartSec=5
+MemoryMax=6G
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+ProtectHome=tmpfs
+BindReadOnlyPaths=@BASE@/app @BASE@/data
+BindPaths=@BASE@/data/hf
+
+[Install]
+WantedBy=multi-user.target

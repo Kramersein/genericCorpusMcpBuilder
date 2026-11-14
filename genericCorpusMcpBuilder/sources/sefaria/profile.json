@@ -1,0 +1,309 @@
+{
+  "languages": {
+    "he": {
+      "name": "Hebrew/Aramaic",
+      "script": "hebrew",
+      "search": "hebrew"
+    },
+    "en": {
+      "name": "English",
+      "script": "latin",
+      "search": "english"
+    }
+  },
+  "eras": [
+    {
+      "code": "T",
+      "name": "Tannaim"
+    },
+    {
+      "code": "A",
+      "name": "Amoraim"
+    },
+    {
+      "code": "GN",
+      "name": "Geonim"
+    },
+    {
+      "code": "RI",
+      "name": "Rishonim"
+    },
+    {
+      "code": "AH",
+      "name": "Acharonim"
+    },
+    {
+      "code": "CO",
+      "name": "Contemporary"
+    }
+  ],
+  "source_url": "https://www.sefaria.org/{ref}",
+  "citation_scheme_preference": [
+    "Vilna",
+    "Daf",
+    "Pages",
+    "Vavim and Amudim",
+    "Venice"
+  ],
+  "strata": [
+    {
+      "id": "tanakh",
+      "label": "Written Torah (Tanakh)"
+    },
+    {
+      "id": "mishnah",
+      "label": "Mishnah, Tosefta and early (Tannaitic) midrash"
+    },
+    {
+      "id": "talmud",
+      "label": "Talmud and Amoraic midrash"
+    },
+    {
+      "id": "commentaries",
+      "label": "Classic commentaries"
+    },
+    {
+      "id": "early-codes",
+      "label": "Early codes (Rambam, Tur and other Rishonim)"
+    },
+    {
+      "id": "shulchan-arukh",
+      "label": "Shulchan Arukh and its commentaries"
+    },
+    {
+      "id": "later-codes",
+      "label": "Later codes and halakhic guides"
+    },
+    {
+      "id": "responsa",
+      "label": "Responsa"
+    },
+    {
+      "id": "other",
+      "label": "Thought, ethics, Kabbalah and other works"
+    }
+  ],
+  "stratum_rules": [
+    {
+      "stratum": "shulchan-arukh",
+      "category": [
+        "Halakhah"
+      ],
+      "title_prefix": [
+        "Shulchan Arukh, ",
+        "Mishnah Berurah",
+        "Magen Avraham",
+        "Turei Zahav",
+        "Siftei Kohen",
+        "Beur HaGra",
+        "Be'er Heitev",
+        "Biur Halacha",
+        "Ba'er Hetev",
+        "Pithei Teshuva"
+      ]
+    },
+    {
+      "stratum": "shulchan-arukh",
+      "category": [
+        "Halakhah"
+      ],
+      "comments_on_prefix": [
+        "Shulchan Arukh, "
+      ]
+    },
+    {
+      "stratum": "early-codes",
+      "category": [
+        "Halakhah"
+      ],
+      "era": [
+        "GN",
+        "RI"
+      ]
+    },
+    {
+      "stratum": "later-codes",
+      "category": [
+        "Halakhah"
+      ]
+    },
+    {
+      "stratum": "commentaries",
+      "category": [
+        "Tanakh",
+        "Mishnah",
+        "Tosefta",
+        "Talmud",
+        "Midrash"
+      ],
+      "dependent": true
+    },
+    {
+      "stratum": "tanakh",
+      "category": [
+        "Tanakh"
+      ]
+    },
+    {
+      "stratum": "mishnah",
+      "category": [
+        "Mishnah",
+        "Tosefta"
+      ]
+    },
+    {
+      "stratum": "mishnah",
+      "category": [
+        "Midrash"
+      ],
+      "era": [
+        "T"
+      ]
+    },
+    {
+      "stratum": "talmud",
+      "category": [
+        "Talmud",
+        "Midrash"
+      ]
+    },
+    {
+      "stratum": "responsa",
+      "category": [
+        "Responsa"
+      ]
+    }
+  ],
+  "research": {
+    "group_by": "strata",
+    "keyword_categories": [
+      "Tanakh",
+      "Mishnah",
+      "Tosefta",
+      "Talmud",
+      "Midrash",
+      "Halakhah",
+      "Responsa"
+    ],
+    "keyword_base_texts_only": true,
+    "keyword_dependent_categories": [
+      "Halakhah"
+    ],
+    "keyword_strata": [
+      "tanakh",
+      "mishnah",
+      "talmud",
+      "early-codes",
+      "shulchan-arukh",
+      "later-codes"
+    ],
+    "follow_links": [
+      {
+        "from_strata": [
+          "mishnah",
+          "talmud",
+          "early-codes",
+          "later-codes"
+        ],
+        "to_title_prefix": [
+          "Shulchan Arukh, "
+        ],
+        "link_types": [
+          "ein mishpat / ner mitsvah",
+          "commentary",
+          "quotation",
+          ""
+        ],
+        "candidates": 10,
+        "score_factor": 0.8
+      }
+    ],
+    "reserve": {
+      "shulchan-arukh": 2,
+      "early-codes": 1
+    },
+    "major_commentaries": [
+      {
+        "on_title_prefix": [
+          "Shulchan Arukh, "
+        ],
+        "commentary_prefixes": [
+          "Mishnah Berurah",
+          "Magen Avraham",
+          "Turei Zahav",
+          "Siftei Kohen",
+          "Beur HaGra",
+          "Be'er Heitev",
+          "Biur Halacha",
+          "Ba'er Hetev",
+          "Pithei Teshuva",
+          "Arukh HaShulchan"
+        ],
+        "limit": 8
+      }
+    ],
+    "relevance_margin": {
+      "en": 0.12,
+      "he": 0.2
+    },
+    "next_steps": [
+      "Read the most relevant sources in full with get_text(ref, context=2) before relying on them.",
+      "Use get_commentary(ref) on the key Talmud or Shulchan Arukh passage to see how it was understood.",
+      "Use trace_halakha(ref) to follow a law from its source to the codes, or back.",
+      "explore_topic on a matching or related topic gives a wider overview to offer the person.",
+      "If the sources found are off-target, call again with key_terms in Hebrew/Aramaic.",
+      "Before answering, pass every citation and quote you will use to verify_citations."
+    ]
+  },
+  "trace": {
+    "tool": "trace_halakha",
+    "categories": [
+      "Tanakh",
+      "Mishnah",
+      "Tosefta",
+      "Talmud",
+      "Midrash",
+      "Halakhah",
+      "Responsa"
+    ],
+    "description": "Follow a law through the link graph: from a ref to its earlier sources (Torah, Mishnah, Talmud) and its later\ncodification (Rambam, Tur, Shulchan Arukh, Acharonim), split by era and date. depth 1-3."
+  },
+  "embedding": {
+    "title_prefixes": [
+      "Mishneh Torah,",
+      "Shulchan Arukh,",
+      "Tur,",
+      "Tur ",
+      "Mishnah Berurah",
+      "Kitzur Shulchan Arukh",
+      "Arukh HaShulchan",
+      "Shulchan Arukh HaRav"
+    ],
+    "base_text_categories": [
+      "Tanakh",
+      "Mishnah",
+      "Tosefta"
+    ],
+    "category_paths": [
+      [
+        "Talmud",
+        "Bavli"
+      ]
+    ],
+    "translation_coverage": 0.8
+  },
+  "tool_descriptions": {
+    "research_question": "START HERE for any question. Finds primary sources for a question in plain language (English or Hebrew) by\nmeaning, by Sefaria's curated topics and by key_terms, follows the Talmud and Rambam to the Shulchan Arukh, and\nreturns the sources arranged by historical layer (Torah, Mishnah, Talmud, commentaries, early codes, Shulchan\nArukh and its commentaries, later codes, responsa) with short excerpts, matching topics and next steps.\nkey_terms: 2-4 Hebrew/Aramaic terms a scholar would use (e.g. [\"כיבוד אב ואם\"]); they sharpen results a lot.\nExcerpts are leads: read sources in full with get_text before relying on them.",
+    "explore_topic": "A Sefaria topic (e.g. \"Shabbat Candles\", \"Lashon Hara\", \"Honoring Parents\", or a Hebrew name): its\ndescription, related topics, and its curated sources arranged by historical layer with short excerpts. Use it to\ngive an overview of a subject or to find sources research_question missed.",
+    "get_text": "Exact text of a reference or range (\"Berakhot 2a:1-5\", \"Mishneh Torah, Sabbath 1:1\"), a named passage\n(\"Parashat Noach 2\", \"Jerusalem Talmud Shabbat, Vilna 7a\", \"Shabbat, Bameh Madlikin\") or words of one segment\n(\"Moed Katan 8b:9@29-32\"). context=N adds N segments before and after, to read a passage in context. Returns\nHebrew and English per segment with the translation used for each English line, other names for the passage, a\nfingerprint of the exact text and the build id. english_version picks a translation (see get_work_info).",
+    "get_commentary": "What the commentators say on a passage: excerpts from each commentary work (e.g. Rashi and Tosafot on the\nTalmud, Mishnah Berurah and Magen Avraham on the Shulchan Arukh), earliest first. works narrows to specific\ntitles, e.g. [\"Mishnah Berurah\"].",
+    "verify_citations": "CALL BEFORE ANSWERING. Checks a list of citations, each {\"ref\": ..., \"quote\": optional}: the ref must exist\nand the quote (Hebrew or English) must appear there, ignoring vowels, punctuation, prefix letters and -ים/-ין.\nReturns all_verified, the failures, and for each match a word-exact citation (cite_as), the original words, and\nthe build and text fingerprint it was verified against. For a failed quote it gives the closest match and where\nelse the quote appears.",
+    "find_quote": "Where does this phrase come from? Finds a quotation anywhere in the corpus, earliest work first, with a\nword-exact citation for each occurrence. Matching ignores vowels, punctuation, prefix letters and -ים/-ין; other\nspelling variants need a second try. Dates follow traditional attributions, so check the era before calling\nsomething the earliest source.",
+    "search": "Keyword search when you know the words: all words must appear (exact_phrase for word order). Hebrew searches\nthe originals, English the translations. categories e.g. [\"Talmud\"], [\"Halakhah\"]; works: exact titles.",
+    "semantic_search": "Passages by meaning only, across Tanakh, Mishnah, Tosefta, Bavli and the main codes. research_question already\nuses this; call it directly for a narrower follow-up (e.g. categories=[\"Halakhah\"]).",
+    "get_links": "All cross-references of a ref (refs only): commentaries, quotations, Ein Mishpat links to the codes.\nlink_types e.g. [\"commentary\"], [\"ein mishpat / ner mitsvah\"], [\"quotation\"].",
+    "get_work_info": "About a work: Hebrew title, author, era and date, what it comments on, available translations, sections, and\nthe other citation systems it can be cited by.",
+    "list_works": "List works by category (\"Halakhah\", \"Responsa\", \"Talmud\") or part of the title, oldest first.",
+    "about_corpus": "The build this server holds: source export date, build id, code fingerprint, hashing and word-numbering rules,\ncounts. Cite the build id when saying a source was verified."
+  }
+}

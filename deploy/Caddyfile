@@ -1,0 +1,31 @@
+# HTTPS in front of genericCorpusMcpBuilder. Caddy obtains and renews the certificate itself.
+# Used by `docker compose --profile https up -d`; also works with a Caddy installed on the host
+# (set CORPUS_MCP_UPSTREAM=127.0.0.1:8765).
+#
+#   CORPUS_MCP_DOMAIN       name clients use, e.g. mcp.example.org or myserver.local (default: localhost)
+#   CORPUS_MCP_CERT_ISSUER  internal  Caddy's own CA, for localhost and LAN-only names; clients must trust Caddy's
+#                                    root certificate (default)
+#                          acme      Let's Encrypt; needs a public DNS name pointing here and port 80 or 443
+#                                    reachable from the internet
+#   CORPUS_MCP_ALLOW_FROM   client networks allowed in, space-separated CIDRs or `private_ranges` (default:
+#                          private_ranges, i.e. LAN and localhost only; the server has no authentication)
+#   CORPUS_MCP_UPSTREAM     where the server listens (default: corpus-mcp:8765, the compose service)
+
+{$CORPUS_MCP_DOMAIN:localhost} {
+	tls {
+		issuer {$CORPUS_MCP_CERT_ISSUER:internal}
+	}
+
+	@outside not remote_ip {$CORPUS_MCP_ALLOW_FROM:private_ranges}
+
+	# route keeps this order: reject outsiders, proxy /mcp, 404 for anything else
+	route {
+		respond @outside "Forbidden" 403
+		reverse_proxy /mcp* {$CORPUS_MCP_UPSTREAM:corpus-mcp:8765} {
+			# the server accepts only its local Host names; Caddy has already matched the public one
+			header_up Host localhost
+			flush_interval -1
+		}
+		respond 404
+	}
+}

@@ -1,0 +1,12 @@
+data
+data-*
+.venv
+.tools
+.pytest_cache
+.idea
+.vscode
+.claude
+playground
+tests
+**/__pycache__
+*.log

@@ -1,0 +1,66 @@
+{
+  "languages": {
+    "grc": {
+      "name": "Ancient Greek",
+      "script": "greek",
+      "search": "plain"
+    },
+    "lat": {
+      "name": "Latin",
+      "script": "latin",
+      "search": "latin"
+    },
+    "en": {
+      "name": "English",
+      "script": "latin",
+      "search": "english"
+    }
+  },
+  "periods": [
+    {
+      "label": "Archaic (to 480 BCE)",
+      "until": -480
+    },
+    {
+      "label": "Classical (480-323 BCE)",
+      "until": -323
+    },
+    {
+      "label": "Hellenistic and Republican (323-31 BCE)",
+      "until": -31
+    },
+    {
+      "label": "Early Empire (31 BCE-284 CE)",
+      "until": 284
+    },
+    {
+      "label": "Late Antiquity (284-600 CE)",
+      "until": 600
+    },
+    {
+      "label": "Medieval and later"
+    }
+  ],
+  "research": {
+    "group_by": "date",
+    "relevance_margin": {
+      "default": 0.12
+    },
+    "next_steps": [
+      "Read the most relevant passages in full with get_text(ref, context=2) before relying on them.",
+      "If the passages found are off-target, call again with key_terms in Greek or Latin (accents are optional).",
+      "Use get_work_info on a work to see its translations and the citation systems it can be cited by.",
+      "Before answering, pass every citation and quote you will use to verify_citations."
+    ]
+  },
+  "citation_scheme_preference": [
+    "Stephanus"
+  ],
+  "embedding": {
+    "translation_coverage": 0.0
+  },
+  "tool_descriptions": {
+    "research_question": "START HERE for any question. Finds passages in the Greek and Latin texts for a question in plain language, by meaning and by key_terms, and returns them grouped by period, earliest first, with short excerpts and next steps. key_terms: 2-4 Greek or Latin words a classicist would search for (e.g. [\"ἀρετή\", \"virtus\"]); accents are optional. Excerpts are leads: read passages in full with get_text before relying on them.",
+    "get_text": "Exact text of a passage or range in the standard citation (\"Iliad 1.1-10\", \"Thucydides 1.22.4\", \"Republic 1.327a\", \"Aeneid 1.1\"), a passage named in another citation system (\"Republic 327a\" by Stephanus page) or words of one segment (\"Iliad 1.1@1-2\"). context=N adds N segments before and after. Returns the Greek or Latin original and the translations per segment with the translation used for each line (its source names the translator), other names for the passage, a fingerprint of the exact text and the build id. Translations may be divided more coarsely than the original (the English Iliad comes in passages that start at the line they are numbered by)."
+  }
+}

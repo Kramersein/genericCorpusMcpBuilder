@@ -1,0 +1,41 @@
+[project]
+name = "genericCorpusMcpBuilder"
+version = "0.1.0"
+description = "MCP server over an indexed Sefaria corpus for source-verified halakhic research"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.20",
+    "numpy>=1.26",
+]
+
+[project.scripts]
+corpus-mcp = "genericCorpusMcpBuilder.cli:main"
+
+[project.optional-dependencies]
+semantic = [
+    "sentence-transformers>=3.0",
+    "torch>=2.3",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["genericCorpusMcpBuilder"]
+
+[tool.uv]
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
