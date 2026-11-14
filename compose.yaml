@@ -13,7 +13,7 @@ x-image: &image
   platform: linux/amd64   # the lockfile targets linux x86_64; on Apple silicon this runs under emulation
 
 services:
-  corpus-mcp:
+  corpus-mcp:                # serves; no torch (the model runs in ONNX Runtime from the data directory)
     <<: *image
     ports:
       - "${CORPUS_MCP_BIND:-127.0.0.1}:${CORPUS_MCP_PORT:-8765}:8765"
@@ -26,8 +26,13 @@ services:
       OMP_NUM_THREADS: ${OMP_NUM_THREADS:-4}
     restart: unless-stopped
 
-  builder:
-    <<: *image
+  builder:                   # builds; with torch, to compute embeddings and export the model
+    build:
+      context: .
+      args:
+        EXTRAS: "--extra semantic --extra embed"
+    image: corpus-mcp-builder
+    platform: linux/amd64
     profiles: ["build"]
     command: ["build", "--source", "${CORPUS_MCP_SOURCE:-sefaria}", "--delete-raw"]
     volumes:

@@ -1,3 +1,4 @@
+import importlib.util
 import json
 import os
 import sqlite3
@@ -156,6 +157,70 @@ def build_topic_vectors(corpus_path: str, out_dir: str) -> None:
     print(f"{len(rows)} topic vectors", flush=True)
 
 
+ONNX_DIR = "onnx"
+
+
+def export_onnx(vectors_dir: str, model_name: str = MODEL_NAME) -> None:
+    """The embedding model as ONNX (vectors/onnx/: model.onnx with its weights, tokenizer.json), so serving needs
+    only onnxruntime and tokenizers. The graph includes the model's pooling (first token) and normalization."""
+    import torch
+    from sentence_transformers import SentenceTransformer
+
+    out = Path(vectors_dir) / ONNX_DIR
+    out.mkdir(parents=True, exist_ok=True)
+    model = SentenceTransformer(model_name, device="cpu")
+    transformer, tokenizer = model[0].auto_model.eval(), model.tokenizer
+
+    class Encoder(torch.nn.Module):
+        def forward(self, input_ids, attention_mask):
+            first = transformer(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state[:, 0]
+            return torch.nn.functional.normalize(first, dim=-1)
+
+    sample = tokenizer(["a short text", "and a somewhat longer one"], padding=True, return_tensors="pt")
+    batch, length = torch.export.Dim("batch"), torch.export.Dim("length", max=MAX_SEQUENCE_TOKENS)
+    torch.onnx.export(Encoder(), (sample["input_ids"], sample["attention_mask"]), str(out / "model.onnx"),
+                      input_names=["input_ids", "attention_mask"], output_names=["sentence_embedding"],
+                      dynamic_shapes=({0: batch, 1: length}, {0: batch, 1: length}), external_data=True,
+                      dynamo=True)
+    tokenizer.backend_tokenizer.save(str(out / "tokenizer.json"))
+    (out / "onnx.json").write_text(json.dumps({"model": model_name, "max_tokens": MAX_SEQUENCE_TOKENS,
+                                               "pad_id": tokenizer.pad_token_id, "pad_token": tokenizer.pad_token}))
+    print(f"exported {model_name} to {out}", flush=True)
+
+
+class OnnxEncoder:
+    """encode() like SentenceTransformer's, from the exported model (no torch)."""
+
+    def __init__(self, directory: Path):
+        import onnxruntime
+        from tokenizers import Tokenizer
+
+        onnxruntime.disable_telemetry_events()     # it would otherwise report to Microsoft
+        settings = json.loads((directory / "onnx.json").read_text())
+        self.tokenizer = Tokenizer.from_file(str(directory / "tokenizer.json"))
+        self.tokenizer.enable_truncation(max_length=settings["max_tokens"])
+        self.tokenizer.enable_padding(pad_id=settings["pad_id"], pad_token=settings["pad_token"])
+        options = onnxruntime.SessionOptions()
+        # Without prepacking and the memory arena the weights stay in the memory-mapped model.onnx.data (file pages
+        # the OS can reclaim): ~0.3 GB of the process's own memory instead of ~1.5 GB, same vectors, ~70 ms a query.
+        options.add_session_config_entry("session.disable_prepacking", "1")
+        options.enable_cpu_mem_arena = False
+        threads = int(os.environ.get("OMP_NUM_THREADS") or 0)
+        if threads:
+            options.intra_op_num_threads = threads
+        self.session = onnxruntime.InferenceSession(str(directory / "model.onnx"), options,
+                                                    providers=["CPUExecutionProvider"])
+
+    def encode(self, texts: list[str], batch_size: int = BATCH_SIZE, **_ignored) -> np.ndarray:
+        vectors = []
+        for start in range(0, len(texts), batch_size):
+            encoded = self.tokenizer.encode_batch(texts[start:start + batch_size])
+            ids = np.array([e.ids for e in encoded], dtype=np.int64)
+            mask = np.array([e.attention_mask for e in encoded], dtype=np.int64)
+            vectors.append(self.session.run(["sentence_embedding"], {"input_ids": ids, "attention_mask": mask})[0])
+        return np.concatenate(vectors) if vectors else np.zeros((0, 0), dtype=np.float32)
+
+
 def write_float32(vectors_dir: str) -> None:
     """vectors.f32 next to vectors.f16: what the server memory-maps for fast search."""
     directory = Path(vectors_dir)
@@ -198,7 +263,7 @@ def locate_passages(corpus_path: str, vectors_dir: str) -> None:
 
 class SemanticIndex:
     def __init__(self, vectors_dir: str, corpus_build: str | None = None):
-        directory = Path(vectors_dir)
+        directory = self.directory = Path(vectors_dir)
         meta = json.loads((directory / "vectors.json").read_text())
         # Memory-mapped, not copied into the process: the OS pages the vectors in and can drop them again under
         # memory pressure. vectors.f32 (written by the build) is used directly; without it, float16 is converted
@@ -233,10 +298,16 @@ class SemanticIndex:
         self.topic_slugs = json.loads((directory / "topics.json").read_text()) if has_topics else []
 
     def load_model(self):
+        """The exported ONNX model when the data directory has it and onnxruntime is installed (no torch needed);
+        otherwise sentence-transformers. Both give the same vectors."""
         if self.model is None:
-            from sentence_transformers import SentenceTransformer
-            self.model = SentenceTransformer(self.model_name, device="cpu")
-            self.model.max_seq_length = MAX_SEQUENCE_TOKENS
+            onnx = self.directory / ONNX_DIR
+            if (onnx / "model.onnx").exists() and importlib.util.find_spec("onnxruntime"):
+                self.model = OnnxEncoder(onnx)
+            else:
+                from sentence_transformers import SentenceTransformer
+                self.model = SentenceTransformer(self.model_name, device="cpu")
+                self.model.max_seq_length = MAX_SEQUENCE_TOKENS
         return self.model
 
     def embed(self, query: str) -> np.ndarray:
@@ -299,7 +370,9 @@ class SemanticIndex:
 
 
 if __name__ == "__main__":
-    if sys.argv[1] == "--topics":
+    if sys.argv[1] == "--export-onnx":
+        export_onnx(sys.argv[2])
+    elif sys.argv[1] == "--topics":
         build_topic_vectors(sys.argv[2], sys.argv[3])
     elif sys.argv[1] == "--locate":
         locate_passages(sys.argv[2], sys.argv[3])

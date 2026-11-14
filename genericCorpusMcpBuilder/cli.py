@@ -60,6 +60,9 @@ def build(args: argparse.Namespace) -> None:
         step("embedding passages (many hours on CPU, resumable)", "genericCorpusMcpBuilder.vectors", db, vectors)
         step("embedding topics", "genericCorpusMcpBuilder.vectors", "--topics", db, vectors)
         step("locating passages in this build", "genericCorpusMcpBuilder.vectors", "--locate", db, vectors)
+        if not (Path(vectors) / "onnx" / "model.onnx").exists():
+            step("exporting the embedding model to ONNX (serving then needs no torch)",
+                 "genericCorpusMcpBuilder.vectors", "--export-onnx", vectors)
     step("precomputing topic dossiers", "genericCorpusMcpBuilder.precompute", db, str(directory / "precomputed.db"))
     if args.delete_raw and not args.corpus:
         import shutil

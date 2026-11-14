@@ -26,6 +26,7 @@ if [ -f "$DATA/vectors/vectors.json" ]; then
     for extra in topics.npy topics.json vectors.f32; do
         [ -f "$DATA/vectors/$extra" ] && cp "$DATA/vectors/$extra" "$SHARE/data/vectors/"
     done
+    [ -d "$DATA/vectors/onnx" ] && cp -r "$DATA/vectors/onnx" "$SHARE/data/vectors/"      # the model, for serving
     for hf in "${HF_HOME:-}" "$HOME/.cache/huggingface" "$PROJECT/.tools/hf"; do
         if [ -n "$hf" ] && [ -d "$hf/hub/models--BAAI--bge-m3" ]; then
             mkdir -p "$SHARE/data/hf/hub"

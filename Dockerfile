@@ -2,7 +2,9 @@
 # which this image can also run). The embedding model is downloaded to /cache on first start.
 #
 #   docker build -t corpus-mcp .
-#   docker build -t corpus-mcp:lite --build-arg EXTRAS= .     # no semantic search, ~1.5 GB smaller
+#   docker build -t corpus-mcp:lite --build-arg EXTRAS= .     # keyword search only
+# The default image serves (semantic search through ONNX Runtime, no torch). Building embeddings needs torch:
+#   docker build -t corpus-mcp-builder --build-arg EXTRAS="--extra semantic --extra embed" .   (compose does this)
 FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
 
 ARG EXTRAS="--extra semantic"
@@ -21,7 +23,8 @@ ENV PATH=/app/.venv/bin:$PATH \
     CORPUS_MCP_DATA=/data \
     CORPUS_MCP_HOST=0.0.0.0 \
     CORPUS_MCP_PORT=8765 \
-    HF_HOME=/cache/hf
+    HF_HOME=/cache/hf \
+    ORT_DISABLE_TELEMETRY=1
 VOLUME ["/data", "/cache"]
 EXPOSE 8765
 ENTRYPOINT ["corpus-mcp"]

@@ -18,6 +18,7 @@ Environment=HF_HOME=@BASE@/data/hf
 # 1 when the embedding model is already in data/hf (then the server never contacts huggingface.co)
 Environment=HF_HUB_OFFLINE=@HF_OFFLINE@
 Environment=OMP_NUM_THREADS=4
+Environment=ORT_DISABLE_TELEMETRY=1
 ExecStart=@BASE@/app/.venv/bin/python -m genericCorpusMcpBuilder serve
 Restart=on-failure
 RestartSec=5

@@ -12,9 +12,17 @@ dependencies = [
 corpus-mcp = "genericCorpusMcpBuilder.cli:main"
 
 [project.optional-dependencies]
+# serving semantic search: the embedding model runs in ONNX Runtime (exported by `corpus-mcp build`)
 semantic = [
+    "onnxruntime>=1.20",
+    "tokenizers>=0.20",
+]
+# building embeddings and exporting the model to ONNX
+embed = [
     "sentence-transformers>=3.0",
     "torch>=2.3",
+    "onnx>=1.17",
+    "onnxscript>=0.2",
 ]
 
 [tool.uv.sources]

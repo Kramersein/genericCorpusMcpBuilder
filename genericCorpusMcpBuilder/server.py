@@ -1,5 +1,6 @@
 import inspect
 import os
+import sys
 import threading
 from pathlib import Path
 from typing import Literal
@@ -55,8 +56,14 @@ def semantic():
             semantic_state["loaded"] = True
             if (DATA_DIR / "vectors" / "vectors.json").exists():
                 from genericCorpusMcpBuilder.vectors import SemanticIndex
-                semantic_state["index"] = SemanticIndex(str(DATA_DIR / "vectors"), corpus.build_id)
-                semantic_state["index"].embed("warm up")
+                index = SemanticIndex(str(DATA_DIR / "vectors"), corpus.build_id)
+                try:
+                    index.embed("warm up")
+                    semantic_state["index"] = index
+                except ImportError as error:
+                    print(f"semantic search is off: {error}. Install the 'semantic' extra and give the data "
+                          "directory vectors/onnx (corpus-mcp build exports it), or install the 'embed' extra.",
+                          file=sys.stderr, flush=True)
         return semantic_state["index"]
 
 

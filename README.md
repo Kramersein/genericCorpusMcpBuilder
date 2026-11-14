@@ -124,7 +124,7 @@ Needs [uv](https://docs.astral.sh/uv/) and Linux x86_64 (the lockfile targets th
 
 ```sh
 git clone <this repo> genericCorpusMcpBuilder && cd genericCorpusMcpBuilder
-uv sync --extra semantic            # leave out --extra semantic for keyword search only (no torch)
+uv sync --extra semantic --extra embed   # embed (torch) builds embeddings; serving needs only semantic (no torch)
 
 # build the data directory: downloads ~10 GB; the embedding step takes many hours on CPU (downloads and
 # embeddings resume where they stopped if interrupted)
@@ -288,7 +288,7 @@ result would mix two exports.
 ## Development
 
 ```sh
-uv sync --extra semantic
+uv sync --extra semantic --extra embed
 uv run pytest                                   # integration tests use ./data/corpus.db or $CORPUS_MCP_TEST_DB
 ```
 
