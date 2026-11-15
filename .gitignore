@@ -27,3 +27,6 @@ dist/
 
 # Adapters and data that must not be published (e.g. ctext.org, whose terms do not allow redistribution)
 /private/
+
+# Machine-specific settings next to the shared ones (e.g. deploy/daoist.local.env)
+/deploy/*.local.env

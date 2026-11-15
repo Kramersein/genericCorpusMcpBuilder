@@ -194,6 +194,10 @@ docker compose --env-file deploy/daoist.env run --rm builder     # build into ./
 docker compose --env-file deploy/daoist.env up -d                # http://127.0.0.1:8766/mcp
 ```
 
+To publish it through the same nginx as a systemd-installed server, on its own path:
+`sudo CORPUS_MCP_ROUTE=/daoist/mcp CORPUS_MCP_PORT=8766 sh deploy/enable-nginx-route.sh`, and let the server accept
+the public host name (see the comments in `deploy/daoist.env`).
+
 ### Assemble your own collection
 
 A list (CSV or TSV) says which texts to use; rows with the same `work` become versions of one work, shown side by
