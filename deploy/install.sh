@@ -17,10 +17,6 @@
 #   CORPUS_MCP_LAN_CIDR     network allowed through nginx (default 192.168.0.0/24)
 #   UV                     path to uv (default: uv on PATH, else .tools/uv in this checkout)
 set -eu
-# Settings used to be called TORAH_MCP_*: those names still work.
-for setting in HOME DATA_SRC PORT PUBLIC_HOST NGINX NGINX_CERT LAN_CIDR; do
-    eval "[ -n \"\${CORPUS_MCP_$setting:-}\" ] || [ -z \"\${TORAH_MCP_$setting:-}\" ] || CORPUS_MCP_$setting=\"\$TORAH_MCP_$setting\""
-done
 
 BUNDLE=$(cd "$(dirname "$0")/.." && pwd)
 BASE=${CORPUS_MCP_HOME:-/opt/corpus-mcp}
@@ -92,11 +88,6 @@ TMPDIR="$WORK" UV_PYTHON_INSTALL_DIR="$APP/.python" UV_CACHE_DIR="$WORK/uv-cache
 rm -rf "$WORK"
 chown -R corpusmcp:corpusmcp "$BASE"
 
-if [ -f /etc/systemd/system/torahMcp.service ]; then     # the service's name before the project was renamed
-    echo "replacing the old torahMcp.service with corpus-mcp.service"
-    systemctl disable --now torahMcp.service || true
-    rm -f /etc/systemd/system/torahMcp.service
-fi
 HF_OFFLINE=0
 [ -d "$DATA/hf/hub/models--BAAI--bge-m3" ] && HF_OFFLINE=1     # staged with the data: no need to go online
 sed -e "s#@BASE@#$BASE#g" -e "s#@PORT@#$PORT#g" -e "s#@PUBLIC_HOST@#$PUBLIC_HOST#g" -e "s#@HF_OFFLINE@#$HF_OFFLINE#g" \

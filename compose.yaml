@@ -4,7 +4,7 @@
 # docker compose --profile https up -d   also start Caddy: HTTPS on https://$CORPUS_MCP_DOMAIN/mcp (see README)
 #
 # Settings go in the environment or in a .env file next to this one, e.g.
-#   CORPUS_MCP_DATA_DIR=/srv/torah-data
+#   CORPUS_MCP_DATA_DIR=/srv/corpus-data
 #   CORPUS_MCP_PORT=8765
 #   CORPUS_MCP_ALLOWED_HOSTS=127.0.0.1:*,localhost:*,mcp.example.org   (when behind a reverse proxy)
 x-image: &image
