@@ -59,7 +59,7 @@ def share(parts: dict, work_languages: dict, languages: list) -> None:
 def known_part(ref: str, parts: dict) -> bool:
     candidate = ref.strip()
     while True:
-        if candidate in parts:
+        if candidate in parts or candidate.split(":", 1)[0] in parts:    # "MN 1:3.4" (a ":" joiner)
             return True
         if " " not in candidate:
             return False

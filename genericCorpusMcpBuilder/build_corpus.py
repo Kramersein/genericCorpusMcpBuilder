@@ -25,7 +25,7 @@ CREATE TABLE works(
     collective_title TEXT, base_text_titles TEXT, description TEXT, language TEXT);
 CREATE TABLE aliases(alias TEXT, title TEXT, PRIMARY KEY(alias, title)) WITHOUT ROWID;
 CREATE TABLE nodes(base TEXT PRIMARY KEY, title TEXT, he_base TEXT, position INTEGER, levels TEXT, separator TEXT,
-                   section_names TEXT);
+                   section_names TEXT, joiner TEXT);
 CREATE TABLE versions(
     id INTEGER PRIMARY KEY, title TEXT, lang TEXT, version_title TEXT, version_source TEXT,
     sources TEXT, segment_count INTEGER DEFAULT 0, is_primary INTEGER DEFAULT 0, priority INTEGER, rank INTEGER,
@@ -36,8 +36,8 @@ CREATE TABLE staging.staged_segments(
 """
 
 UNDECLARED_PARTS_SQL = f"""
-INSERT INTO nodes(base, title, he_base, position, levels, separator, section_names)
-    SELECT s.base, min(v.title), '', 0, '[]', '{DEFAULT_SEPARATOR}', '[]'
+INSERT INTO nodes(base, title, he_base, position, levels, separator, section_names, joiner)
+    SELECT s.base, min(v.title), '', 0, '[]', '{DEFAULT_SEPARATOR}', '[]', ' '
     FROM staging.staged_segments s JOIN versions v ON v.id = s.version_id LEFT JOIN nodes n ON n.base = s.base
     WHERE n.base IS NULL GROUP BY s.base;
 """
@@ -166,10 +166,11 @@ def load_works(corpus: Path, db: sqlite3.Connection, default_language: str) -> d
         for position, part in enumerate(work.get("parts") or [{"name": title}]):
             levels = part.get("levels") or []
             separator = part.get("separator") or DEFAULT_SEPARATOR
-            db.execute("INSERT OR REPLACE INTO nodes VALUES (?,?,?,?,?,?,?)", (
+            joiner = part.get("joiner") or " "            # between the name and the address: "MN 1:3.4" has ":"
+            db.execute("INSERT OR REPLACE INTO nodes VALUES (?,?,?,?,?,?,?,?)", (
                 part["name"], title, (part.get("titles") or {}).get("he", ""), position, json.dumps(levels),
-                separator, json.dumps([level.get("name") for level in levels])))
-            parts[part["name"]] = (levels, separator)
+                separator, json.dumps([level.get("name") for level in levels]), joiner))
+            parts[part["name"]] = (levels, separator, joiner)
     db.commit()
     return parts
 
@@ -196,9 +197,9 @@ def parse_text_file(path: str) -> tuple[dict, list[tuple]]:
             duplicates += 1
             continue
         seen.add((base, cite_key(labels)))
-        levels, separator = PARTS.get(base, ([], DEFAULT_SEPARATOR))
+        levels, separator, joiner = PARTS.get(base, ([], DEFAULT_SEPARATOR, " "))
         kinds = level_kinds(levels, len(labels))
-        ref = f"{base} {separator.join(labels)}" if labels else base
+        ref = f"{base}{joiner}{separator.join(labels)}" if labels else base
         rows.append((base, labels, kinds, LABEL_SEPARATOR.join(labels), cite_key(labels), order_key(labels, kinds),
                      ref, text, segment.get("notes") or "", content_hash(text), index_form(text, mode)))
     version["duplicates"] = duplicates

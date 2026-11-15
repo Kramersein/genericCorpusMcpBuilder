@@ -11,6 +11,11 @@ One server serves one corpus. Built in:
 | [Sefaria](https://www.sefaria.org) | Tanakh, Mishnah, Talmud, Midrash, codes with their commentaries, responsa; Sefaria's link graph and topics | `--source sefaria` |
 | [Perseus](https://github.com/PerseusDL) | Greek and Latin literature with English translations | `--source perseus` |
 | New Testament and church fathers | the Greek New Testament (SBLGNT) with the Vulgate and an English Bible; Greek and Latin fathers from [Open Greek and Latin](https://github.com/OpenGreekAndLatin) | `--source church` |
+| [Project Gutenberg](https://www.gutenberg.org) | public-domain books, by ebook number | `--source gutenberg --option books=1342,2680` |
+| [Wikisource](https://wikisource.org) | transcribed editions in many languages, by page title | `--source wikisource --option works="..." --option contact=...` |
+| [Standard Ebooks](https://standardebooks.org) | proofread public-domain books, by repository name or book page | `--source standardebooks --option books=jane-austen_pride-and-prejudice` |
+| [SuttaCentral](https://suttacentral.net) | the Pali discourses (DN, MN, SN, AN, parts of KN) aligned segment by segment with English translations | `--source suttacentral --option collections=dn,mn` |
+| your own selection | a CSV/TSV list of Gutenberg and Standard Ebooks books, Wikisource editions and your files; rows can be versions of one work | `--source collection --option list=FILE` |
 | your TEI editions | a folder of TEI XML files | `--source tei --raw DIR` |
 | your tables | CSV/TSV, one row per segment | `--source table --raw DIR` |
 | anything else | write an adapter: `corpus-mcp new-adapter NAME` | [docs/adapters.md](docs/adapters.md) |
@@ -131,6 +136,59 @@ Douay-Rheims (or `--option english=web`, the World English Bible) as translation
 (First1KGreek) or Latin (CSEL). `fathers` takes CTS author ids (`tlg1443` Ignatius, `stoa0040` Augustine) or work
 ids, `none` for the Bible only. Everything is openly licensed (SBLGNT CC BY 4.0, Open Greek and Latin CC BY-SA 4.0,
 the Bibles public domain), so a built corpus can be shared under CC BY-SA 4.0 with the credits in `about_corpus`.
+
+### Project Gutenberg and Wikisource
+
+```sh
+uv run corpus-mcp build --source gutenberg --option books=1342,2680,1661 --data /srv/books
+uv run corpus-mcp build --source wikisource --data /srv/wikisource \
+    --option works="Pride and Prejudice (1813)|The Prince (Marriott)" --option contact=you@example.org
+uv run corpus-mcp build --source wikisource --option lang=la --option works="Commentarii de Bello Gallico" ...
+```
+
+Both download politely, as each project asks: Gutenberg books come from its catalog and a mirror (not the website,
+which is for people), 2 seconds apart; Wikisource pages come from its API one at a time, and Wikimedia requires a
+User-Agent with your contact address (`contact=`, sent only to Wikisource). Chapters are cited by their own numbers
+where the headings or page names give them (`Pride and Prejudice 3.2` = chapter III, paragraph 2;
+`Pride and Prejudice (1813) 1.3.2` = volume 1, chapter 3, paragraph 2). Gutenberg texts are public domain in the USA
+(check elsewhere); Wikisource transcriptions are CC BY-SA 4.0.
+
+### Standard Ebooks and SuttaCentral
+
+```sh
+uv run corpus-mcp build --source standardebooks --data /srv/se \
+    --option books=jane-austen_pride-and-prejudice,https://standardebooks.org/ebooks/marcus-aurelius/meditations/george-long
+uv run corpus-mcp build --source suttacentral --data /srv/suttas --option collections=dn,mn,sn,an
+```
+
+Both come from GitHub. A Standard Ebooks book is cited by its file divisions and paragraph (`War and Peace 1.1.3.2` =
+book 1, part 1, chapter 3, paragraph 2); note markers and page breaks are left out. SuttaCentral's Pali and its
+translations share segment ids, so they line up exactly and are cited the way SuttaCentral cites them (`MN 1:3.4`,
+`mn1:3.4`, or by title, `Mūlapariyāyasutta`); `translations=en/sujato,de/sabbamitta` picks the translations and
+`suttas=mn1,mn2` a few suttas to try it out. Standard Ebooks' work is CC0 and its texts are public domain in the USA;
+SuttaCentral's Pali is public domain and its translations CC0.
+
+### Assemble your own collection
+
+A list (CSV or TSV) says which texts to use; rows with the same `work` become versions of one work, shown side by
+side, so a Latin edition from Wikisource and an English translation from Gutenberg are read together:
+
+```csv
+source,id,work,lang,version,author,date
+wikisource,Commentarii de Bello Gallico,Gallic War,la,Latin text,Julius Caesar,-50
+gutenberg,10657,Gallic War,en,McDevitte and Bohn,,
+gutenberg,1342,,,,,
+file,notes/sermon.txt,Sermon on Mercy,en,my transcription,,1650
+```
+
+```sh
+uv run corpus-mcp build --source collection --option list=my-texts.csv --data /srv/mine --option contact=you@example.org
+```
+
+Columns: `source` (gutenberg, standardebooks, wikisource, file) and `id` (ebook number, repository name, page
+title, or a path to a .txt, .html or TEI .xml file) are required; `lang`, `work`, `version`, `title`, `author`, `date`, `language`, `categories` and
+`aliases` (separated by `;`) are optional and fill in or correct what the sources say. Chapters line up across
+versions when both number them the same way ("Liber I" and "BOOK I" are both chapter 1).
 
 ## Install and run (with uv)
 

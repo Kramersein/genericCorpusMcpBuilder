@@ -101,7 +101,7 @@ class Corpus:
         return row["title"] if row else None
 
     def title_cuts(self, text: str):
-        cut_points = sorted({m.start() for m in re.finditer(r"[ ,]", text)} | {len(text)}, reverse=True)
+        cut_points = sorted({m.start() for m in re.finditer(r"[ ,:]", text)} | {len(text)}, reverse=True)
         for cut in cut_points:
             title = self.title_for_alias(text[:cut])
             if title:
@@ -128,7 +128,7 @@ class Corpus:
             return f"{first['ref']} - {last['ref']}"
         part = self.locator.part(first["base"])
         labels = lambda cite: cite.split(LABEL_SEPARATOR) if cite else []
-        return format_range(first["base"], part.separator, labels(first["cite"]), labels(last["cite"]))
+        return format_range(first["base"], part.separator, labels(first["cite"]), labels(last["cite"]), part.joiner)
 
     def resolve_primary(self, candidate: str) -> Passage | str | None:
         resolution = self.locator.resolve(candidate)
@@ -377,16 +377,23 @@ class Corpus:
         if not quote or not passage["found"]:
             return report
         candidates = self.profile.languages_for(quote)
-        lang = next((l for l in candidates if any(l in s for s in passage["segments"])), candidates[0])
+        present = [l for l in candidates if any(l in s for s in passage["segments"])] or candidates[:1]
         wanted_words = search_words(quote)
-        units = [(segment["ref"], position, word) for segment in passage["segments"]
-                 for position, word in word_units(segment.get(lang, ""))]
-        span = find_words([(i, word) for i, (_, _, word) in enumerate(units)], wanted_words, self.spelling_fold(lang))
-        if span:
-            matched = units[span[0]:span[1] + 1]
-            return {**report, "quote_found": True, **describe_match(
-                quote, matched, passage["segments"], lang, self.counted_in(lang, passage["work"]["title"]))}
-        other = self.quote_in_other_versions(ref, passage, lang, wanted_words)
+        # languages sharing a script (Pali and English, Latin and Italian) are each tried, in the profile's order
+        for lang in present:
+            units = [(segment["ref"], position, word) for segment in passage["segments"]
+                     for position, word in word_units(segment.get(lang, ""))]
+            span = find_words([(i, word) for i, (_, _, word) in enumerate(units)], wanted_words,
+                              self.spelling_fold(lang))
+            if span:
+                matched = units[span[0]:span[1] + 1]
+                return {**report, "quote_found": True, **describe_match(
+                    quote, matched, passage["segments"], lang, self.counted_in(lang, passage["work"]["title"]))}
+        other = None
+        for lang in present:
+            other = self.quote_in_other_versions(ref, passage, lang, wanted_words)
+            if other:
+                break
         if other:
             version, segments, matched = other
             default = next((v["version_title"] for v in passage["versions"] if v["lang"] == lang), None)
@@ -397,9 +404,10 @@ class Corpus:
                             f"Name that version when quoting, and count words in it for {found['cite_as']}."}
         best_ratio, best_ref = 0.0, passage["segments"][0]["ref"]
         for segment in passage["segments"]:
-            ratio = best_window_ratio(wanted_words, search_words(segment.get(lang, "")))
-            if ratio > best_ratio:
-                best_ratio, best_ref = ratio, segment["ref"]
+            for lang in present:
+                ratio = best_window_ratio(wanted_words, search_words(segment.get(lang, "")))
+                if ratio > best_ratio:
+                    best_ratio, best_ref = ratio, segment["ref"]
         report.update(quote_found=False, closest_similarity=round(best_ratio, 3), closest_at=best_ref,
                       found_elsewhere=[r["ref"] for r in self.find_quote(quote, limit=10)])
         return report

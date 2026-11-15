@@ -106,6 +106,163 @@ class _TextOnly(HTMLParser):
             self.parts.append(data)
 
 
+class _Blocks(HTMLParser):
+    """Headings and paragraphs of an HTML page in order, leaving out elements with skipped ids or classes."""
+    HEADINGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
+    BLOCKS = HEADINGS | {"p", "li", "dd", "dt", "td", "th"}
+    VOID = {"br", "img", "hr", "meta", "link", "input", "wbr", "col", "area", "base", "source"}
+
+    def __init__(self, skip_ids, skip_classes, skip_attributes=None):
+        super().__init__(convert_charrefs=True)
+        self.skip_ids, self.skip_classes = set(skip_ids), set(skip_classes)
+        self.skip_attributes = {name: set(values) for name, values in (skip_attributes or {}).items()}
+        self.stack, self.skipping, self.blocks, self.current = [], 0, [], None
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if tag in self.VOID:
+            if self.current is not None and not self.skipping:
+                if tag == "br":
+                    self.current[1].append(" ")
+                elif tag == "img" and attributes.get("alt"):     # a drop cap: the letter is the image's alt text
+                    self.current[1].append(attributes["alt"])
+            return
+        skip = (tag in ("script", "style", "sup") and "noteref" in (attributes.get("class") or "")) or \
+            tag in ("script", "style") or attributes.get("id") in self.skip_ids or \
+            bool(self.skip_classes & set((attributes.get("class") or "").split())) or \
+            any(values & set((attributes.get(name) or "").split()) for name, values in self.skip_attributes.items())
+        self.stack.append((tag, skip))
+        self.skipping += skip
+        if tag in self.BLOCKS and not self.skipping and self.current is None:
+            self.current = (tag, [])
+
+    def handle_endtag(self, tag):
+        if tag in self.VOID:
+            return
+        while self.stack:                          # close up to the matching tag (tolerates unclosed children)
+            open_tag, skip = self.stack.pop()
+            self.skipping -= skip
+            if self.current is not None and open_tag == self.current[0]:
+                text = re.sub(r"\s+", " ", "".join(self.current[1])).strip()
+                if text:
+                    self.blocks.append((open_tag, text))
+                self.current = None
+            if open_tag == tag:
+                break
+
+    def handle_data(self, data):
+        if self.current is not None and not self.skipping:
+            self.current[1].append(data)
+
+
+def html_blocks(markup: str, skip_ids=(), skip_classes=(), skip_attributes=None) -> list[tuple[str, str]]:
+    """An HTML page as (tag, text) blocks in reading order: headings ("h1".."h6") and paragraphs ("p", list items,
+    table cells), each as plain text. Elements whose id is in skip_ids or which have a class in skip_classes are
+    left out with everything inside them (headers, footers, page numbers, navigation, footnote markers), and so are
+    elements with one of the values of skip_attributes ({"epub:type": ["noteref"]})."""
+    parser = _Blocks(skip_ids, skip_classes, skip_attributes)
+    parser.feed(markup)
+    parser.close()
+    return parser.blocks
+
+
+def chapters_from_blocks(blocks: list[tuple[str, str]], heading: str | None = None) -> list[tuple[str, list[str]]]:
+    """Group blocks into chapters at one heading level: [(heading text, [paragraphs]), ...]. Without heading=, the
+    most frequent heading level is taken (chapters outnumber parts). Text before the first such heading (title
+    pages) is left out; headings of other levels inside a chapter become ordinary paragraphs."""
+    counts = {}
+    for tag, _ in blocks:
+        if tag.startswith("h"):
+            counts[tag] = counts.get(tag, 0) + 1
+    if heading is None:
+        if not counts:
+            return [("", [text for _, text in blocks])] if blocks else []
+        heading = max(counts, key=lambda tag: (counts[tag], -int(tag[1])))
+    chapters = []
+    for tag, text in blocks:
+        if tag == heading:
+            chapters.append((text, []))
+        elif chapters:
+            chapters[-1][1].append(text)
+    return [(title, paragraphs) for title, paragraphs in chapters if paragraphs]
+
+
+ROMAN = {"i": 1, "v": 5, "x": 10, "l": 50, "c": 100, "d": 500, "m": 1000}
+_NUMERAL = r"(\d+|(?=[mdclxvi])m{0,4}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3}))"
+_KEYWORD = (r"(?:chapter|chap\.?|book|part|letter|canto|section|stave|act|scene|psalm|volume|vol\.?"
+            r"|liber|caput|cap\.?|pars|epistula|sermo"                       # Latin
+            r"|buch|kapitel|teil|band"                                         # German
+            r"|livre|chapitre|partie|tome"                                     # French
+            r"|libro|cap[ií]tulo|capitolo|parte)")                             # Spanish, Italian
+NUMBER_WORDS = {word: n for n, words in enumerate([
+    ("one", "first"), ("two", "second"), ("three", "third"), ("four", "fourth"), ("five", "fifth"), ("six", "sixth"),
+    ("seven", "seventh"), ("eight", "eighth"), ("nine", "ninth"), ("ten", "tenth"), ("eleven", "eleventh"),
+    ("twelve", "twelfth"), ("thirteen", "thirteenth"), ("fourteen", "fourteenth"), ("fifteen", "fifteenth"),
+    ("sixteen", "sixteenth"), ("seventeen", "seventeenth"), ("eighteen", "eighteenth"), ("nineteen", "nineteenth"),
+    ("twenty", "twentieth")], 1) for word in words}
+_WORD = "(" + "|".join(sorted(NUMBER_WORDS, key=len, reverse=True)) + ")"
+WORD_HEADINGS = [re.compile(rf"^\s*{_KEYWORD}\s+(?:the\s+)?{_WORD}\b", re.IGNORECASE),   # BOOK ONE, Chapter the First
+                 re.compile(rf"^\s*(?:the\s+)?{_WORD}\s+{_KEYWORD}\b", re.IGNORECASE)]  # THE FIRST BOOK, Second Part
+NUMBERED_HEADINGS = [re.compile(rf"^\s*{_KEYWORD}\s+{_NUMERAL}\b", re.IGNORECASE),      # Chapter IV, BOOK 2
+                     re.compile(rf"^\s*{_NUMERAL}\s*[.:]?\s*$", re.IGNORECASE),          # IV.  /  12
+                     re.compile(rf"^\s*{_NUMERAL}[.:]\s+\S", re.IGNORECASE)]             # IV. The Storm
+
+
+def roman_to_int(numeral: str) -> int:
+    values = [ROMAN[c] for c in numeral.lower()]
+    return sum(-v if i + 1 < len(values) and v < values[i + 1] else v for i, v in enumerate(values))
+
+
+def heading_number(heading: str) -> int | None:
+    """4 for "Chapter IV.", "CHAPTER 4", "IV.", "IV. The Storm", "BOOK FOUR" or "THE FOURTH BOOK"; None for
+    "Preface", "Mild Days" or "His First Book" (a number word only counts at the start, before or after a keyword)."""
+    for pattern in WORD_HEADINGS:
+        match = pattern.match(heading or "")
+        if match:
+            return NUMBER_WORDS[match.group(1).lower()]
+    for pattern in NUMBERED_HEADINGS:
+        match = pattern.match(heading or "")
+        if match and match.group(1):
+            token = match.group(1)
+            return int(token) if token.isdigit() else roman_to_int(token)
+    return None
+
+
+def section_labels(headings: list[str]) -> list[str]:
+    """Citation labels for chapters from their headings: "Chapter IV." -> "4", "BOOK 2" -> "2", "Preface" ->
+    "Preface". If any label would repeat (chapter numbers starting again in each book), the chapters are numbered
+    1, 2, 3 ... in order instead, so no two chapters share a citation."""
+    labels = []
+    for heading in headings:
+        number = heading_number(heading)
+        if number is not None:
+            labels.append(str(number))
+        else:
+            text = re.sub(r"\s+", " ", (heading or "").replace(".", " ")).strip(" :;,")
+            labels.append(text or str(len(labels) + 1))
+    if len({label.lower() for label in labels}) < len(labels):
+        return [str(number) for number in range(1, len(labels) + 1)]
+    return labels
+
+
+def cached_json(path, ask):
+    """The answer saved at path, or ask() (a function that calls an API) saved there first. So an API is never asked
+    twice for the same thing, and an interrupted download continues where it stopped."""
+    path = Path(path)
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
+    answer = ask()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(answer, ensure_ascii=False), encoding="utf-8")
+    return answer
+
+
+def pause(seconds) -> None:
+    """Wait between requests to a server (be polite: most sources ask for one request at a time, with a pause)."""
+    import time
+    time.sleep(float(seconds))
+
+
 def html_to_text(markup: str) -> str:
     """The text of an HTML page or fragment: tags, scripts and styles dropped, one line per paragraph or line break."""
     parser = _TextOnly()
@@ -146,10 +303,11 @@ class SimpleCorpus:
              author: str | None = None, authors: list[str] | None = None, date=None, date_text: str | None = None,
              categories: list[str] | None = None, aliases=(), titles: dict | None = None, comments_on=(),
              dependence: str | None = None, description: str | None = None, name: str | None = None,
-             kinds: dict | None = None, keep_cites: bool = False) -> str:
+             kinds: dict | None = None, keep_cites: bool = False, joiner: str = " ") -> str:
         """Add a work; returns the name to cite it by (and to pass to text()). levels are the citation levels'
         names, outermost first; kinds ({level name: "folio"}) overrides the kinds worked out from the labels.
-        date is a year (negative = BCE) or [earliest, latest]. keep_cites lets page_citations() use it later."""
+        date is a year (negative = BCE) or [earliest, latest]. keep_cites lets page_citations() use it later.
+        joiner goes between the name and the address in citations (" " by default; ":" gives "MN 1:3.4")."""
         authors = authors or ([author] if author else [])
         name = name or title
         if name in self.works:
@@ -164,7 +322,7 @@ class SimpleCorpus:
             "authors": authors, "categories": categories if categories is not None else authors[:1],
             "date": [date, date] if isinstance(date, int) else date, "date_text": date_text,
             "comments_on": list(comments_on), "dependence": dependence, "description": description,
-            "levels": list(levels or []), "separator": separator, "kinds": kinds or {}}
+            "levels": list(levels or []), "separator": separator, "kinds": kinds or {}, "joiner": joiner}
         self.kinds[name] = []
         if keep_cites:
             self.cites[name] = set()
@@ -250,8 +408,10 @@ class SimpleCorpus:
                 if kind:
                     level["kind"] = kind
                 levels.append(level)
-            record = {k: v for k, v in info.items() if k not in ("levels", "separator", "kinds") and v not in (None, [], {})}
-            record["parts"] = [{"name": name, "levels": levels, "separator": info["separator"]}]
+            record = {k: v for k, v in info.items()
+                      if k not in ("levels", "separator", "kinds", "joiner") and v not in (None, [], {})}
+            record["parts"] = [{"name": name, "levels": levels, "separator": info["separator"],
+                                **({"joiner": info["joiner"]} if info["joiner"] != " " else {})}]
             self.writer.work(record)
         original = self.manifest["original_language"]
         languages = [original] + [lang for lang in self.languages if lang != original]

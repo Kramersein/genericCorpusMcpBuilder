@@ -5,10 +5,13 @@ An adapter turns a source into a corpus directory ([corpus-format.md](corpus-for
 
 | source | your files are | use |
 |---|---|---|
+| a selection of Gutenberg books, Wikisource editions and your own files | a CSV/TSV list, one row per text | `--source collection --option list=FILE` |
 | spreadsheets, exports, anything tabular | CSV/TSV, one row per verse/line/section | `--source table --raw DIR` |
 | TEI XML editions that declare their citations (refsDecl/cRefPattern) | a folder of `.xml` files | `--source tei --raw DIR` |
 | Perseus (Greek and Latin) | nothing: downloaded | `--source perseus` |
 | Sefaria | nothing: downloaded | `--source sefaria` |
+| Project Gutenberg books | nothing: downloaded (ebook numbers) | `--source gutenberg --option books=1342` |
+| Wikisource editions, any language | nothing: downloaded (page titles) | `--source wikisource --option works=...` |
 | anything else | | your own adapter (below) |
 
 ```sh
@@ -65,7 +68,9 @@ def convert(raw, out, **options):    # required: read raw/, write the corpus dir
 ```
 
 `--option KEY=VALUE` values arrive as keyword arguments of both functions. Helpers, all importable from
-`genericCorpusMcpBuilder`: `download(url, path)` (resumable), `html_to_text(html)`, `read_tei(path)` (a TEI edition
+`genericCorpusMcpBuilder`: `download(url, path)` (resumable), `pause(seconds)`, `cached_json(path, ask)` (API answers
+saved once), `html_blocks(html)` and `chapters_from_blocks(blocks)` (a web page as headings and paragraphs, then
+chapters), `section_labels(headings)` ("Chapter IV" -> "4"), `html_to_text(html)`, `read_tei(path)` (a TEI edition
 into segments), `read_usfx(path)` (a USFX Bible), `language_code(code)`.
 
 `corpus.text()` takes segments as `(cite, text)` tuples, dicts or a pandas DataFrame (`cite=`, `text=`, `notes=` name
@@ -118,21 +123,54 @@ segments = [([str(c), str(v)], text) for c, chapter in enumerate(data["chapters"
 corpus.text(work, "en", "JSON edition", segments)
 ```
 
-**Web pages**: download them in `fetch()` and read them in `convert()`:
+**Web pages**: download them in `fetch()` (politely: one at a time, with a pause) and read them in `convert()`:
 
 ```python
-from genericCorpusMcpBuilder import download, html_to_text
+from genericCorpusMcpBuilder import SimpleCorpus, chapters_from_blocks, download, html_blocks, pause, section_labels
 
 def fetch(raw, **options):
-    for n in range(1, 13):
-        download(f"https://example.org/book/{n}.html", raw / f"{n:02d}.html")
+    if download("https://example.org/my-book.html", raw / "book.html"):    # True only if it was downloaded now
+        pause(2)
 
 def convert(raw, out, **options):
-    ...
-    for path in sorted(raw.glob("*.html")):
-        paragraphs = html_to_text(path.read_text(encoding="utf-8")).splitlines()
-        corpus.text(...)   # or collect, then one text() per version
+    corpus = SimpleCorpus(out, id="book", name="My book", original_language="en")
+    blocks = html_blocks((raw / "book.html").read_text(encoding="utf-8"),
+                         skip_ids=["site-footer"], skip_classes=["pagenum", "navigation"])  # what is not the text
+    # (skip_attributes={"epub:type": ["noteref"]} also drops elements by any other attribute, as in EPUB files)
+    chapters = chapters_from_blocks(blocks)          # [(heading, [paragraphs]), ...] at the main heading level
+    labels = section_labels([heading for heading, paragraphs in chapters])    # "Chapter IV" -> "4"
+    work = corpus.work("My Book", levels=["chapter", "paragraph"], language="en")
+    segments = []
+    for label, (heading, paragraphs) in zip(labels, chapters):
+        for number, paragraph in enumerate(paragraphs, 1):
+            segments.append(([label, str(number)], paragraph))
+    corpus.text(work, "en", "Web edition", segments)
+    corpus.finish()
 ```
+
+`html_to_text(html)` gives the plain text of a page when there is no structure to keep.
+
+**An API** (a service you ask for one passage at a time): save every answer so nothing is asked twice and an
+interrupted download continues where it stopped, and pause between requests:
+
+```python
+from genericCorpusMcpBuilder import cached_json, pause
+
+def ask(urn):
+    answer = some_api.get_text(urn)        # whatever the source's API or Python module offers
+    pause(3)                               # only after a real request: cached answers return at once
+    return answer
+
+def fetch(raw, **options):
+    for urn in ["book/1", "book/2"]:
+        cached_json(raw / "answers" / (urn.replace("/", "_") + ".json"), lambda: ask(urn))
+```
+
+Read the source's terms first (rate limits, keys, whether automatic downloading is allowed at all), stop at its
+"too many requests" error instead of retrying, and send a User-Agent with contact details where it asks for one
+(`download(url, path, headers={"User-Agent": "..."})`). To test without the network, give your adapter a stand-in for the
+API module that returns saved answers: in a pytest test, `monkeypatch.setitem(sys.modules, "some_api", fake)` before
+importing the adapter, where `fake = types.ModuleType("some_api")` has the functions your adapter calls.
 
 Check a site's terms before downloading it, and keep the license in `SimpleCorpus(license=...)` and, where it
 differs per version, `corpus.text(..., license="...")`.

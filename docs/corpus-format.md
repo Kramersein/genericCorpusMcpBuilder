@@ -93,8 +93,9 @@ the segment's text in the work's original language.
 | `collective_title`, `description` | *optional* |
 | `parts` | the work's citable parts, in reading order. Most works have one part named like the work |
 
-A part has `name` (the citation prefix; unique across the corpus), *optional* `titles`, `levels` and
-`separator` (default `:`). A level has `name` and *optional* `kind`:
+A part has `name` (the citation prefix; unique across the corpus), *optional* `titles`, `levels`,
+`separator` (default `:`) and `joiner` (what goes between the name and the address, default a space; SuttaCentral's
+`MN 1:3.4` uses `":"`. Either is accepted in input). A level has `name` and *optional* `kind`:
 
 | kind | labels | input accepted |
 |---|---|---|

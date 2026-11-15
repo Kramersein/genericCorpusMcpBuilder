@@ -2,6 +2,7 @@
 import itertools
 import json
 import re
+import sqlite3
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -43,14 +44,14 @@ def order_key(labels: list[str], kinds: list[str], rank_of=None) -> str | None:
     return ORDER_SEPARATOR.join(keys)
 
 
-def format_range(base: str, separator: str, start: list[str], end: list[str]) -> str:
+def format_range(base: str, separator: str, start: list[str], end: list[str], joiner: str = " ") -> str:
     if not start:
         return base
     address = separator.join(start)
     if end != start:
         shared = next((i for i, (a, b) in enumerate(zip(start, end)) if a != b), min(len(start), len(end)))
         address += "-" + separator.join(end[shared:])
-    return f"{base} {address}"
+    return f"{base}{joiner}{address}"
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,7 @@ class Part:
     title: str
     kinds: tuple[str, ...]
     separator: str
+    joiner: str = " "
 
     def kinds_for(self, depth: int) -> list[str]:
         return [self.kinds[i] if i < len(self.kinds) else "number" for i in range(depth)]
@@ -74,7 +76,7 @@ class Resolution:
 
     @property
     def ref(self) -> str:
-        return format_range(self.part.base, self.part.separator, self.start, self.end)
+        return format_range(self.part.base, self.part.separator, self.start, self.end, self.part.joiner)
 
 
 def normalize_label(label: str, kind: str) -> str:
@@ -159,12 +161,15 @@ class Locator:
         self.part = lru_cache(maxsize=100000)(self.load_part)
 
     def load_part(self, base: str) -> Part | None:
-        row = self.db.execute("SELECT title, levels, separator FROM nodes WHERE base = ?", (base,)).fetchone()
+        try:
+            row = self.db.execute("SELECT title, levels, separator, joiner FROM nodes WHERE base = ?", (base,)).fetchone()
+        except sqlite3.OperationalError:              # built before names could end in ":"
+            row = self.db.execute("SELECT title, levels, separator, ' ' FROM nodes WHERE base = ?", (base,)).fetchone()
         if not row:
             return None
         levels = json.loads(row[1] or "[]")
         return Part(base, row[0], tuple(level.get("kind") or "number" for level in levels),
-                    row[2] or DEFAULT_SEPARATOR)
+                    row[2] or DEFAULT_SEPARATOR, row[3] or " ")
 
     def split(self, citation: str) -> tuple[Part, list[tuple[list[str], list[str]]]] | None:
         """Longest known part name first; the rest (no spaces) must parse as labels of that part."""
@@ -178,6 +183,12 @@ class Locator:
             address = citation[len(candidate) + 1:]
             part = self.part(candidate) if address and not any(c.isspace() for c in address) else None
             readings = parse_address(address, part) if part else []
+            if readings:
+                return part, readings
+        # "MN 1:3.4": a colon can also end the name, when no space does (SuttaCentral cites this way)
+        for position in [i for i, c in enumerate(citation) if c == ":"][::-1]:
+            part = self.part(citation[:position].strip())
+            readings = parse_address(citation[position + 1:].strip(), part) if part else []
             if readings:
                 return part, readings
         return None

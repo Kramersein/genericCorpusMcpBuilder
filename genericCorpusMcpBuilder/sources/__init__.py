@@ -11,6 +11,11 @@ ADAPTERS = {
     "sefaria": "genericCorpusMcpBuilder.sources.sefaria",      # Sefaria's public export
     "perseus": "genericCorpusMcpBuilder.sources.perseus",      # Perseus Greek and Latin texts (GitHub)
     "church": "genericCorpusMcpBuilder.sources.church",        # New Testament (Greek, Latin, English) and church fathers
+    "gutenberg": "genericCorpusMcpBuilder.sources.gutenberg",  # Project Gutenberg books by number (mirror)
+    "wikisource": "genericCorpusMcpBuilder.sources.wikisource",  # Wikisource editions by page title (any language)
+    "suttacentral": "genericCorpusMcpBuilder.sources.suttacentral",  # Pali suttas with translations (bilara-data)
+    "standardebooks": "genericCorpusMcpBuilder.sources.standardebooks",  # Standard Ebooks books (GitHub)
+    "collection": "genericCorpusMcpBuilder.sources.collection",  # your own list (CSV/TSV) of the above and files
     "tei": "genericCorpusMcpBuilder.sources.tei_files",        # a folder of TEI XML files (--raw)
     "table": "genericCorpusMcpBuilder.sources.table",          # CSV/TSV files, one row per segment (--raw)
 }

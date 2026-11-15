@@ -5,8 +5,11 @@ import os
 os.environ.setdefault("ORT_DISABLE_TELEMETRY", "1")
 
 
-# For adapters: from genericCorpusMcpBuilder import SimpleCorpus, download, html_to_text, read_tei, read_usfx
+# For adapters: from genericCorpusMcpBuilder import SimpleCorpus, download, html_blocks, chapters_from_blocks,
+# cached_json, pause, html_to_text, read_tei, read_usfx, language_code
 _SHORTCUTS = {"SimpleCorpus": "sources.kit", "language_code": "sources.kit", "html_to_text": "sources.kit",
+              "html_blocks": "sources.kit", "chapters_from_blocks": "sources.kit", "cached_json": "sources.kit",
+              "pause": "sources.kit", "section_labels": "sources.kit", "heading_number": "sources.kit",
               "download": "sources.http", "read_tei": "sources.tei", "read_usfx": "sources.usfx"}
 
 

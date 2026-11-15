@@ -45,6 +45,8 @@ KNOWN_LANGUAGES = {
     "el": {"name": "Greek", "script": "greek"},
     "ell": {"name": "Greek", "script": "greek"},
     "la": {"name": "Latin", "script": "latin", "search": "latin"},
+    "pli": {"name": "Pali", "script": "latin"},
+    "pi": {"name": "Pali", "script": "latin"},
     "lat": {"name": "Latin", "script": "latin", "search": "latin"},
     "ar": {"name": "Arabic", "script": "arabic"},
     "ara": {"name": "Arabic", "script": "arabic"},
