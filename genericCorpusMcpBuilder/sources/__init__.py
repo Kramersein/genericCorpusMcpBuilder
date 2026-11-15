@@ -15,6 +15,8 @@ ADAPTERS = {
     "wikisource": "genericCorpusMcpBuilder.sources.wikisource",  # Wikisource editions by page title (any language)
     "suttacentral": "genericCorpusMcpBuilder.sources.suttacentral",  # Pali suttas with translations (bilara-data)
     "standardebooks": "genericCorpusMcpBuilder.sources.standardebooks",  # Standard Ebooks books (GitHub)
+    "kanripo": "genericCorpusMcpBuilder.sources.kanripo",      # premodern Chinese texts; Daoist preset (GitHub)
+    "aozora": "genericCorpusMcpBuilder.sources.aozora",        # Aozora Bunko: Japanese public-domain literature
     "collection": "genericCorpusMcpBuilder.sources.collection",  # your own list (CSV/TSV) of the above and files
     "tei": "genericCorpusMcpBuilder.sources.tei_files",        # a folder of TEI XML files (--raw)
     "table": "genericCorpusMcpBuilder.sources.table",          # CSV/TSV files, one row per segment (--raw)

@@ -14,6 +14,8 @@ One server serves one corpus. Built in:
 | [Project Gutenberg](https://www.gutenberg.org) | public-domain books, by ebook number | `--source gutenberg --option books=1342,2680` |
 | [Wikisource](https://wikisource.org) | transcribed editions in many languages, by page title | `--source wikisource --option works="..." --option contact=...` |
 | [Standard Ebooks](https://standardebooks.org) | proofread public-domain books, by repository name or book page | `--source standardebooks --option books=jane-austen_pride-and-prejudice` |
+| [Kanripo](https://www.kanripo.org) | premodern Chinese texts; a Daoist preset (Laozi, Zhuangzi, Liezi, Huainanzi, Baopuzi, commentaries, Daozang scriptures) | `--source kanripo` (or `--option texts=KR5c0126,...`) |
+| [Aozora Bunko](https://www.aozora.gr.jp) | Japanese literature out of copyright, by author or work | `--source aozora --option authors=芥川竜之介` |
 | [SuttaCentral](https://suttacentral.net) | the Pali discourses (DN, MN, SN, AN, parts of KN) aligned segment by segment with English translations | `--source suttacentral --option collections=dn,mn` |
 | your own selection | a CSV/TSV list of Gutenberg and Standard Ebooks books, Wikisource editions and your files; rows can be versions of one work | `--source collection --option list=FILE` |
 | your TEI editions | a folder of TEI XML files | `--source tei --raw DIR` |
@@ -148,7 +150,8 @@ uv run corpus-mcp build --source wikisource --option lang=la --option works="Com
 
 Both download politely, as each project asks: Gutenberg books come from its catalog and a mirror (not the website,
 which is for people), 2 seconds apart; Wikisource pages come from its API one at a time, and Wikimedia requires a
-User-Agent with your contact address (`contact=`, sent only to Wikisource). Chapters are cited by their own numbers
+User-Agent with your contact address (`contact=`, or `CORPUS_MCP_CONTACT=...` in a `.env` file in the folder you run
+`corpus-mcp` from, which git ignores; it is sent only to Wikisource). Chapters are cited by their own numbers
 where the headings or page names give them (`Pride and Prejudice 3.2` = chapter III, paragraph 2;
 `Pride and Prejudice (1813) 1.3.2` = volume 1, chapter 3, paragraph 2). Gutenberg texts are public domain in the USA
 (check elsewhere); Wikisource transcriptions are CC BY-SA 4.0.
@@ -167,6 +170,29 @@ translations share segment ids, so they line up exactly and are cited the way Su
 `mn1:3.4`, or by title, `Mūlapariyāyasutta`); `translations=en/sujato,de/sabbamitta` picks the translations and
 `suttas=mn1,mn2` a few suttas to try it out. Standard Ebooks' work is CC0 and its texts are public domain in the USA;
 SuttaCentral's Pali is public domain and its translations CC0.
+
+### Kanripo (Chinese) and Aozora Bunko (Japanese)
+
+```sh
+uv run corpus-mcp build --source kanripo --data /srv/daoist          # the Daoist preset, 22 texts
+uv run corpus-mcp build --source kanripo --data /srv/kr --option texts=KR3a0001,KR3j0010
+uv run corpus-mcp build --source aozora --data /srv/aozora --option authors=芥川竜之介,夏目漱石
+```
+
+Kanripo texts (CC BY-SA 4.0) come from their GitHub repositories, one per text; ids are in the
+[catalog](https://github.com/kanripo/KR-Catalog). Passages are cited as juan.paragraph (`Zhuangzi 1.3`), by chapter
+name (`Zhuangzi 逍遙遊`), by section heading, by page of the edition (`Zuowang lun p1b`) and by the TLS reference
+where a text has one (`ZHUANG 1.1.1`). Daozang editions are unpunctuated, as printed. `edition=` picks another
+edition (a branch: `tls`, `HFL`, `SBCK`, ...). Aozora Bunko's works are taken only when the catalog marks the work and
+everyone credited as out of copyright; ruby readings and transcribers' notes are left out, characters shown as images
+are restored from their JIS codes, and each file's credits (底本, 入力, 校正) are kept with its version, as Aozora asks.
+
+A second server for the Daoist corpus, in Docker, next to the default one:
+
+```sh
+docker compose --env-file deploy/daoist.env run --rm builder     # build into ./data-kanripo-daoist
+docker compose --env-file deploy/daoist.env up -d                # http://127.0.0.1:8766/mcp
+```
 
 ### Assemble your own collection
 

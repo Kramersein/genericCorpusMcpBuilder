@@ -149,7 +149,19 @@ def new_adapter(args: argparse.Namespace) -> None:
     write_adapter(args.name, Path(args.dir).expanduser().resolve())
 
 
+def load_settings_file(path: Path = Path(".env")) -> None:
+    """KEY=VALUE lines from .env (kept out of git) for settings like CORPUS_MCP_CONTACT; the environment wins."""
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.removeprefix("export ").strip(), value.strip().strip("'\""))
+
+
 def main() -> None:
+    load_settings_file()
     parser = argparse.ArgumentParser(prog="corpus-mcp", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
 

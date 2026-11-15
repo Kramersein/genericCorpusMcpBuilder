@@ -208,6 +208,30 @@ NUMBERED_HEADINGS = [re.compile(rf"^\s*{_KEYWORD}\s+{_NUMERAL}\b", re.IGNORECASE
                      re.compile(rf"^\s*{_NUMERAL}[.:]\s+\S", re.IGNORECASE)]             # IV. The Storm
 
 
+CJK_DIGITS = {"〇": 0, "零": 0, "一": 1, "壱": 1, "壹": 1, "二": 2, "弐": 2, "貳": 2, "三": 3, "参": 3, "參": 3,
+              "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+CJK_UNITS = {"十": 10, "拾": 10, "百": 100, "千": 1000}
+# 一, 第三章, 第十二回, 其の二, 卷第五: a Chinese or Japanese numeral, alone or with 第 and a counter
+CJK_HEADING = re.compile(r"^\s*(?:其の|卷第|巻第|第)?([〇零一二三四五六七八九十百千壱壹弐貳参參拾]+)"
+                         r"\s*[章回節篇卷巻部話段條条則]?\s*[.．、]?\s*$")
+
+
+def cjk_number(numeral: str) -> int | None:
+    """"二十三" -> 23, "百五" -> 105, "一〇五" -> 105 (digit by digit); None if it is not a numeral."""
+    if not numeral or any(c not in CJK_DIGITS and c not in CJK_UNITS for c in numeral):
+        return None
+    if not any(c in CJK_UNITS for c in numeral):
+        return int("".join(str(CJK_DIGITS[c]) for c in numeral))
+    total, digit = 0, None
+    for c in numeral:
+        if c in CJK_DIGITS:
+            digit = CJK_DIGITS[c]
+        else:
+            total += (1 if digit is None else digit) * CJK_UNITS[c]
+            digit = None
+    return total + (digit or 0)
+
+
 def roman_to_int(numeral: str) -> int:
     values = [ROMAN[c] for c in numeral.lower()]
     return sum(-v if i + 1 < len(values) and v < values[i + 1] else v for i, v in enumerate(values))
@@ -215,7 +239,8 @@ def roman_to_int(numeral: str) -> int:
 
 def heading_number(heading: str) -> int | None:
     """4 for "Chapter IV.", "CHAPTER 4", "IV.", "IV. The Storm", "BOOK FOUR" or "THE FOURTH BOOK"; None for
-    "Preface", "Mild Days" or "His First Book" (a number word only counts at the start, before or after a keyword)."""
+    "Preface", "Mild Days" or "His First Book" (a number word only counts at the start, before or after a keyword).
+    Chinese and Japanese numerals too: 4 for "四", "第四章", "其の四"."""
     for pattern in WORD_HEADINGS:
         match = pattern.match(heading or "")
         if match:
@@ -225,7 +250,8 @@ def heading_number(heading: str) -> int | None:
         if match and match.group(1):
             token = match.group(1)
             return int(token) if token.isdigit() else roman_to_int(token)
-    return None
+    match = CJK_HEADING.match(heading or "")
+    return cjk_number(match.group(1)) if match else None
 
 
 def section_labels(headings: list[str]) -> list[str]:
