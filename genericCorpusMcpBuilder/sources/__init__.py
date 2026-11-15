@@ -10,6 +10,7 @@ from pathlib import Path
 ADAPTERS = {
     "sefaria": "genericCorpusMcpBuilder.sources.sefaria",      # Sefaria's public export
     "perseus": "genericCorpusMcpBuilder.sources.perseus",      # Perseus Greek and Latin texts (GitHub)
+    "church": "genericCorpusMcpBuilder.sources.church",        # New Testament (Greek, Latin, English) and church fathers
     "tei": "genericCorpusMcpBuilder.sources.tei_files",        # a folder of TEI XML files (--raw)
     "table": "genericCorpusMcpBuilder.sources.table",          # CSV/TSV files, one row per segment (--raw)
 }

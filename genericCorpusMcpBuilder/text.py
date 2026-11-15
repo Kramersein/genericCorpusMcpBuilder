@@ -15,6 +15,13 @@ QUOTE_MARKS_INSIDE_WORDS = re.compile(r"""(?<=\w)["'׳״‘’“”](?=\w)""")
 PUNCTUATION = re.compile(r"[^\w\s]")
 ELISION_MARKS = re.compile(r"[\u02BC\u1FBD\u1FBF\u2019']")   # Greek ἄλγεʼ, δʼ: the mark is not part of the word
 LATIN_SPELLING = str.maketrans("vj", "ui")                       # uirum = virum, iam = jam
+# Chinese characters and Japanese kana: written without spaces, so each character is a unit of its own (a "word" for
+# search, quotes and @n-m citations). Korean Hangul separates words with spaces and is left as words.
+CJK_CHARACTER = re.compile("[\u3040-\u30ff\u31f0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff"
+                           "\U00020000-\U0003134f]")
+# Combining marks that are letters' vowels or voicing, not accents: kept (Japanese が, Devanagari, Thai, Tibetan ...)
+KEEP_MARKS_AFTER = re.compile("[\u0900-\u0dff\u0e00-\u0eff\u0f00-\u0fff\u1000-\u109f\u1780-\u17ff"
+                              "\u3040-\u30ff]")
 
 
 def clean_display_text(raw: str) -> tuple[str, str]:
@@ -26,9 +33,17 @@ def clean_display_text(raw: str) -> tuple[str, str]:
 
 
 def strip_accents(text: str) -> str:
-    """Drop combining marks: Greek accents and breathings, Latin diacritics, Arabic vowel signs."""
+    """Drop combining marks: Greek accents and breathings, Latin and Cyrillic diacritics, Arabic vowel signs. Marks
+    that are part of the letter in Indic, Thai, Tibetan and similar scripts, and Japanese voicing marks, are kept."""
     decomposed = unicodedata.normalize("NFD", text)
-    return unicodedata.normalize("NFC", "".join(c for c in decomposed if unicodedata.category(c) != "Mn"))
+    kept, base = [], ""
+    for c in decomposed:
+        if unicodedata.category(c) != "Mn":
+            base = c
+            kept.append(c)
+        elif KEEP_MARKS_AFTER.match(base or " "):
+            kept.append(c)
+    return unicodedata.normalize("NFC", "".join(kept))
 
 
 def normalize_for_search(text: str) -> str:
@@ -84,8 +99,35 @@ def words_match(query_word: str, text_word: str, fold=None) -> bool:
     return a == b or is_prefixed_form(a, b) or is_prefixed_form(b, a)
 
 
+def tokens(text: str) -> list[str]:
+    """Whitespace-separated words; a Chinese character or kana is a token of its own, and punctuation after it
+    joins it ("之，" is one token), as "beginning," is one word. Without such characters this is text.split()."""
+    if not CJK_CHARACTER.search(text):
+        return text.split()
+    out, attached = [], False
+    for c in text:
+        if c.isspace():
+            attached = False
+        elif CJK_CHARACTER.match(c) or not attached:
+            out.append(c)
+            attached = True
+        else:
+            out[-1] += c
+    return out
+
+
 def display_words(text: str) -> list[str]:
-    return text.replace("**", "").split()
+    return tokens(text.replace("**", ""))
+
+
+def search_words(text: str) -> list[str]:
+    """The normalized units of a query or quote, as word_units counts them in a text."""
+    return [word for _, word in word_units(text)]
+
+
+def spaced_characters(normalized: str) -> str:
+    """Chinese characters and kana separated by spaces: what the cjk search mode indexes and searches."""
+    return WHITESPACE.sub(" ", CJK_CHARACTER.sub(lambda m: f" {m.group(0)} ", normalized)).strip()
 
 
 def word_units(text: str) -> list[tuple[int, str]]:

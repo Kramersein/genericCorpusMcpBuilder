@@ -99,6 +99,51 @@ def set_profile(args: argparse.Namespace) -> None:
           f"python -m genericCorpusMcpBuilder.precompute {directory}/corpus.db {directory}/precomputed.db", flush=True)
 
 
+def open_corpus(data: str | None):
+    from genericCorpusMcpBuilder.corpus import Corpus
+    path = data_dir(data) / "corpus.db"
+    if not path.exists():
+        raise SystemExit(f"no corpus.db in {path.parent}; build one first (corpus-mcp build ...)")
+    return Corpus(str(path))
+
+
+def show(args: argparse.Namespace) -> None:
+    """A passage as the server would return it, in plain text: to try citations without an MCP client."""
+    from genericCorpusMcpBuilder.corpus import RefNotFound
+    corpus = open_corpus(args.data)
+    try:
+        result = corpus.get_text(args.ref, (args.language,) if args.language else None, None, args.context)
+    except RefNotFound as error:
+        raise SystemExit(str(error))
+    work = result["work"]
+    print(f"{result['ref']}  ({work['title']}, written in {work.get('language')})"
+          + (f"  also cited as: {result['cited_as']}" if result.get("cited_as") else ""))
+    if not result["found"]:
+        print("  (the citation is valid, but there is no text there)")
+    for segment in result["segments"]:
+        print(f"\n{segment['ref']}")
+        for lang in corpus.profile.languages:
+            if lang in segment:
+                version = segment.get(f"{lang}_version")
+                print(f"  [{lang}{' ' + version if version else ''}] {segment[lang]}")
+                if segment.get(f"{lang}_notes"):
+                    print(f"      notes: {segment[f'{lang}_notes']}")
+    others = result.get("also_cited_as") or []
+    if others:
+        print(f"\nother citations: {'; '.join(others)}")
+
+
+def search_command(args: argparse.Namespace) -> None:
+    corpus = open_corpus(args.data)
+    try:
+        hits = corpus.search(args.query, lang=args.language, limit=args.limit)
+    except ValueError as error:
+        raise SystemExit(str(error))
+    for hit in hits:
+        print(f"{hit['ref']}  [{hit['lang']}]  {hit['text'][:160]}")
+    print(f"({len(hits)} found)")
+
+
 def new_adapter(args: argparse.Namespace) -> None:
     from genericCorpusMcpBuilder.scaffold import write_adapter
     write_adapter(args.name, Path(args.dir).expanduser().resolve())
@@ -143,6 +188,20 @@ def main() -> None:
                                                "instructions.md, answer_prompt.md")
     profile_parser.add_argument("--data", help=f"the built data directory (default: $CORPUS_MCP_DATA or ./{DEFAULT_DATA})")
     profile_parser.set_defaults(handler=set_profile)
+
+    show_parser = commands.add_parser("show", help="print a passage of a built corpus (try citations without a client)")
+    show_parser.add_argument("ref", help='a citation, e.g. "John 1:1-3" or "Iliad 1.1"')
+    show_parser.add_argument("--data", help=f"the built data directory (default: $CORPUS_MCP_DATA or ./{DEFAULT_DATA})")
+    show_parser.add_argument("--context", type=int, default=0, help="segments before and after")
+    show_parser.add_argument("--language", help="only this language")
+    show_parser.set_defaults(handler=show)
+
+    search_parser = commands.add_parser("search", help="keyword search in a built corpus")
+    search_parser.add_argument("query")
+    search_parser.add_argument("--data", help=f"the built data directory (default: $CORPUS_MCP_DATA or ./{DEFAULT_DATA})")
+    search_parser.add_argument("--language", help="search this language (default: by the query's script)")
+    search_parser.add_argument("--limit", type=int, default=10)
+    search_parser.set_defaults(handler=search_command)
 
     adapter_parser = commands.add_parser("new-adapter", help="write a working adapter template to start from")
     adapter_parser.add_argument("name", help="the adapter's name, e.g. my_texts")

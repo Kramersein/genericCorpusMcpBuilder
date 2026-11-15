@@ -1,0 +1,59 @@
+{
+  "languages": {
+    "grc": {
+      "name": "Greek",
+      "script": "greek",
+      "search": "plain"
+    },
+    "lat": {
+      "name": "Latin",
+      "script": "latin",
+      "search": "latin"
+    },
+    "en": {
+      "name": "English",
+      "script": "latin",
+      "search": "english"
+    }
+  },
+  "periods": [
+    {
+      "label": "New Testament and Apostolic Fathers (to 150)",
+      "until": 150
+    },
+    {
+      "label": "Apologists and Ante-Nicene Fathers (150-325)",
+      "until": 325
+    },
+    {
+      "label": "Nicene and Post-Nicene Fathers (325-451)",
+      "until": 451
+    },
+    {
+      "label": "Late Antiquity (451-800)",
+      "until": 800
+    },
+    {
+      "label": "Medieval and later"
+    }
+  ],
+  "research": {
+    "group_by": "date",
+    "next_steps": [
+      "Read the most relevant passages in full with get_text(ref, context=2) before relying on them.",
+      "If the passages found are off-target, call again with key_terms in Greek or Latin (e.g. \"ἀγάπη\", \"gratia\"); accents are optional.",
+      "Use get_work_info on a work to see its versions: for the New Testament the Greek SBLGNT is the original, the Vulgate and the English Bible are translations.",
+      "Before answering, pass every citation and quote you will use to verify_citations."
+    ]
+  },
+  "embedding": {
+    "translation_coverage": 0.8,
+    "prefer_languages": [
+      "en"
+    ]
+  },
+  "tool_descriptions": {
+    "research_question": "START HERE for any question. Finds passages in the New Testament and the church fathers for a question in plain language, by meaning and by key_terms, and returns them grouped by period (New Testament and Apostolic Fathers, Apologists, Nicene and Post-Nicene, ...), earliest first, with short excerpts and next steps. key_terms: 2-4 Greek or Latin words a scholar would search for (e.g. [\"δικαιοσύνη\", \"iustitia\"]); accents are optional. Excerpts are leads: read passages in full with get_text before relying on them.",
+    "get_text": "Exact text of a passage or range: New Testament as book chapter:verse (\"John 1:1-5\", \"1 Cor 13:4\", \"Rom. 3:21\"), fathers in their standard citation (\"1 Clement 5.1\", \"Eusebius, Church History 3.39.15\"), or words of one segment (\"John 1:1@1-3\"). context=N adds N segments before and after. Returns the original (Greek for the New Testament) and the translations per segment (Latin Vulgate, English), with the version used for each line, a fingerprint of the exact text and the build id."
+  }
+}

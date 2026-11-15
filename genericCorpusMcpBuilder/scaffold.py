@@ -14,7 +14,7 @@ This template works as it is: fetch() writes two example files into raw/ and con
 (one segment per line: the citation, a tab, the text). Replace both with your source."""
 from pathlib import Path
 
-from genericCorpusMcpBuilder.sources.kit import SimpleCorpus
+from genericCorpusMcpBuilder import SimpleCorpus
 
 HERE = Path(__file__).parent
 

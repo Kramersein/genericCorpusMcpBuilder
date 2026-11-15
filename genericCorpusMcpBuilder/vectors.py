@@ -47,7 +47,9 @@ def embedding_versions(corpus: sqlite3.Connection) -> list[tuple]:
         if not is_embedded_work(title, json.loads(categories), dependence, settings):
             continue
         original = language or profile.original_language
-        translations = profile.translations_for(original)
+        preferred = settings.get("prefer_languages") or []          # e.g. ["en"]: the model knows English best
+        translations = sorted(profile.translations_for(original),
+                              key=lambda l: preferred.index(l) if l in preferred else len(preferred))
         primaries = {lang: (vid, count) for vid, lang, count in corpus.execute(
             "SELECT id, lang, segment_count FROM versions WHERE title = ? AND is_primary = 1", (title,))}
         original_count = primaries.get(original, (None, 0))[1]

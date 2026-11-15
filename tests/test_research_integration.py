@@ -63,3 +63,10 @@ def test_hebrew_search_rejects_words_that_only_end_like_the_query(corpus):
 def test_topic_lookup_by_name(corpus):
     explored = Researcher(corpus).explore_topic("Honoring Parents")
     assert explored.get("layers") and explored["sources_in_topic"] > 10
+
+
+@pytest.mark.parametrize("limit", [1, 3, 4, 8])
+def test_research_never_returns_more_sources_than_asked(corpus, limit):
+    dossier = Researcher(corpus).research("Must I honor my parents if they treat me badly?", ["כיבוד אב ואם"],
+                                          max_sources=limit)
+    assert 0 < len(all_refs(dossier)) <= limit

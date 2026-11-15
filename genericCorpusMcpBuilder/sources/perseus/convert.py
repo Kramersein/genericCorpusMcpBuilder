@@ -77,7 +77,12 @@ def convert(raw: Path, out: Path, translations=None, **_options) -> None:
     corpus.finish(profile_dir=Path(__file__).parent)
 
 
-def convert_work(corpus: SimpleCorpus, work: dict, name: str) -> None:
+def convert_work(corpus: SimpleCorpus, work: dict, name: str, dates: dict | None = None,
+                 aliases: dict | None = None, categories: list[str] | None = None) -> None:
+    """One CTS work (from read_work) into the corpus. dates ({author id: (year, text)}) and aliases ({work id:
+    [...]}) default to Perseus's tables; categories default to the author."""
+    dates = AUTHOR_DATES if dates is None else dates
+    aliases = ALIASES if aliases is None else aliases
     texts = [(version, read_tei(version["path"], report=lambda m: print(m, flush=True))) for version in work["versions"]]
     texts = [(version, text) for version, text in texts if text and text.segments]
     originals = [text for version, text in texts if version["lang"] == work["language"]]
@@ -85,18 +90,19 @@ def convert_work(corpus: SimpleCorpus, work: dict, name: str) -> None:
         print(f"skipped {work['id']} {work['title']}: no readable original", flush=True)
         return
     group = work["id"].split(".")[0]
-    date, date_text = AUTHOR_DATES.get(group, (None, None))
+    date, date_text = dates.get(group, (None, None))
     corpus.work(work["title"], name=name, levels=originals[0].level_names, language=work["language"],
                 author=work["author"] or None, date=date, date_text=date_text,
                 titles={k: v for k, v in work["titles"].items() if v != name},
-                aliases=[work["id"], work["urn"], *work["titles"].values(), *ALIASES.get(work["id"], []),
+                categories=categories, aliases=[work["id"], work["urn"], *work["titles"].values(), *aliases.get(work["id"], []),
                          *([f"{work['author']} {work['title']}"] if work["author"] else [])],
                 description=texts[0][0]["description"] or None, keep_cites=True)
     ranks: dict[str, int] = {}
     for version, text in texts:
         rank = ranks[version["lang"]] = ranks.get(version["lang"], -1) + 1
         corpus.text(name, version["lang"], version["urn"].rsplit(":", 1)[-1], text.segments,
-                    source=version["description"] or version["urn"], rank=rank, urn=version["urn"])
+                    source=version["description"] or version["urn"], rank=rank, urn=version["urn"],
+                    **({"license": text.license} if text.license else {}))
     schemes = {}
     for _, text in texts:
         for scheme, count in text.split_schemes.items():

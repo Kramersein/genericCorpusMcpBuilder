@@ -10,7 +10,7 @@ from pathlib import Path
 from genericCorpusMcpBuilder.citations import (DEFAULT_SEPARATOR, LABEL_SEPARATOR, Locator, cite_key, level_kinds, order_key)
 from genericCorpusMcpBuilder.corpus_format import iter_jsonl, optional_records, read_manifest, text_files
 from genericCorpusMcpBuilder.profile import SEARCH_MODES, Profile
-from genericCorpusMcpBuilder.text import latin_spelling, normalize_for_search, reversed_index_form
+from genericCorpusMcpBuilder.text import latin_spelling, normalize_for_search, reversed_index_form, spaced_characters
 
 LONG_LINK_SPAN = 500
 LINK_BATCH = 100000
@@ -28,7 +28,8 @@ CREATE TABLE nodes(base TEXT PRIMARY KEY, title TEXT, he_base TEXT, position INT
                    section_names TEXT);
 CREATE TABLE versions(
     id INTEGER PRIMARY KEY, title TEXT, lang TEXT, version_title TEXT, version_source TEXT,
-    sources TEXT, segment_count INTEGER DEFAULT 0, is_primary INTEGER DEFAULT 0, priority INTEGER, rank INTEGER);
+    sources TEXT, segment_count INTEGER DEFAULT 0, is_primary INTEGER DEFAULT 0, priority INTEGER, rank INTEGER,
+    license TEXT);
 CREATE TABLE staging.staged_segments(
     id INTEGER PRIMARY KEY, version_id INTEGER, base TEXT, cite TEXT, cite_key TEXT, order_key TEXT, ref TEXT,
     text TEXT, notes TEXT, text_hash BLOB);
@@ -95,6 +96,8 @@ def index_form(text: str, mode: str) -> str:
     normalized = normalize_for_search(text)
     if mode == "hebrew":
         return reversed_index_form(normalized)
+    if mode == "cjk":
+        return spaced_characters(normalized)
     return latin_spelling(normalized) if mode == "latin" else normalized
 
 
@@ -227,11 +230,11 @@ def load_texts(corpus: Path, db: sqlite3.Connection, parts: dict[str, tuple], pr
                 print(f"{Path(files[done - 1]).name}: dropped {version['duplicates']} segments whose citation "
                       "repeats an earlier one in the same version", flush=True)
             version_id = db.execute(
-                "INSERT INTO versions(title, lang, version_title, version_source, sources, segment_count, rank) "
-                "VALUES (?,?,?,?,?,?,?)",
+                "INSERT INTO versions(title, lang, version_title, version_source, sources, segment_count, rank, license) "
+                "VALUES (?,?,?,?,?,?,?,?)",
                 (version["work"], version["lang"], version.get("title"), version.get("source"),
                  json.dumps(version.get("merged_from") or []), len(rows),
-                 version.get("rank"))).lastrowid
+                 version.get("rank"), version.get("license"))).lastrowid
             ids = range(next_segment_id, next_segment_id + len(rows))
             next_segment_id += len(rows)
             db.executemany("INSERT INTO staging.staged_segments VALUES (?,?,?,?,?,?,?,?,?,?)", [
@@ -370,7 +373,8 @@ def write_manifest(manifest: dict, stored_profile: dict, db: sqlite3.Connection)
         ("built_at", datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")),
         ("code_fingerprint", code), ("content_fingerprint", content_fingerprint(db)), ("hash_algorithm", "blake2b-128 over segment display text, UTF-8"),
         ("word_numbering", "words are the whitespace-separated tokens of a segment's display text with ** removed, "
-                           "numbered from 1; ref@n-m counts words in the text in the work's original language"),
+                           "numbered from 1 (a Chinese character or kana counts as a word, with any punctuation after it); "
+                           "ref@n-m counts words in the text in the work's original language"),
         ("counts", json.dumps(counts)),
         *stored_profile.items(),
     ])

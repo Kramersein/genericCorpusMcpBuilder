@@ -12,6 +12,7 @@ from genericCorpusMcpBuilder.sources.http import USER_AGENT, download
 
 REPOSITORIES = {"greekLit": "PerseusDL/canonical-greekLit", "latinLit": "PerseusDL/canonical-latinLit"}
 RAW_FILE = "https://raw.githubusercontent.com/{repository}/master/data/{path}"
+TREE = "https://api.github.com/repos/{repository}/git/trees/master?recursive=1"
 ARCHIVE = "https://codeload.github.com/{repository}/tar.gz/refs/heads/master"
 CTS = "{http://chs.harvard.edu/xmlns/cts}"
 XML_LANG = "{http://www.w3.org/XML/1998/namespace}lang"
@@ -34,10 +35,27 @@ def repository_of(work_id: str) -> str:
     return "greekLit" if work_id.startswith("tlg") else "latinLit"
 
 
-def fetch_work(raw: Path, repository: str, work_id: str, translations: list[str]) -> int:
+def works_of_group(repository_path: str, group: str, cache: dict = {}) -> list[str]:
+    """The work ids of an author (textgroup) in a CTS repository on GitHub: one listing call per repository."""
+    if repository_path not in cache:
+        request = urllib.request.Request(TREE.format(repository=repository_path), headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(request, timeout=120) as response:
+            cache[repository_path] = [e["path"] for e in json.load(response)["tree"]]
+    works = {path.split("/")[2] for path in cache[repository_path]
+             if path.startswith(f"data/{group}/") and path.endswith("/__cts__.xml") and path.count("/") == 3}
+    return sorted(f"{group}.{work}" for work in works)
+
+
+def fetch_work(raw: Path, repository: str, work_id: str, translations: list[str],
+               repositories: dict = REPOSITORIES) -> int:
+    """Download one work (CTS id, e.g. tlg0012.tlg001) or, given an author id (tlg0012), all of that author's works.
+    Returns the number of versions downloaded."""
+    if "." not in work_id:
+        return sum(fetch_work(raw, repository, work, translations, repositories)
+                   for work in works_of_group(repositories[repository], work_id))
     group, work = work_id.split(".", 1)
     base = raw / repository / "data"
-    url = lambda path: RAW_FILE.format(repository=REPOSITORIES[repository], path=path)
+    url = lambda path: RAW_FILE.format(repository=repositories[repository], path=path)
     download(url(f"{group}/__cts__.xml"), base / group / "__cts__.xml")
     download(url(f"{group}/{work}/__cts__.xml"), base / group / work / "__cts__.xml")
     metadata = base / group / work / "__cts__.xml"

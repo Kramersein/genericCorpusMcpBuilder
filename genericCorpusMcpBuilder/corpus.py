@@ -11,7 +11,7 @@ from genericCorpusMcpBuilder.citations import LABEL_SEPARATOR, Locator, format_r
 from genericCorpusMcpBuilder.profile import Profile
 from genericCorpusMcpBuilder.refs import hebrew_address_to_english, split_word_span
 from genericCorpusMcpBuilder.text import (display_words, find_words, latin_spelling, normalize_for_search, reversed_query_terms,
-                           word_units)
+                           search_words, spaced_characters, word_units)
 
 HEBREW_LETTER = re.compile(r"[א-ת]")
 MAX_LOCATIONS_PER_REQUEST = 300
@@ -53,6 +53,12 @@ def fts_query(text: str, as_phrase: bool, mode: str = "plain") -> str:
     normalized = normalize_for_search(text)
     if mode == "latin":
         normalized = latin_spelling(normalized)
+    if mode == "cjk":                    # each space-separated part of the query is a sequence of characters
+        parts = [normalized] if as_phrase else normalized.split()
+        terms = [f'"{spaced_characters(part)}"' for part in parts if spaced_characters(part)]
+        if not terms:
+            raise ValueError("query has no searchable words")
+        return " ".join(terms)
     if mode == "hebrew":
         terms = reversed_query_terms(normalized)
         joiner = " + " if as_phrase else " "
@@ -267,9 +273,11 @@ class Corpus:
                 filled = [r for r in rows if lang not in by_location.get(r["location_id"], {})]
                 if not filled:
                     continue
-                versions_used.append({"lang": lang, "version_title": version["version_title"],
-                                      "source": version["version_source"],
-                                      "merged_from": json.loads(version["sources"] or "[]")})
+                used = {"lang": lang, "version_title": version["version_title"], "source": version["version_source"],
+                        "merged_from": json.loads(version["sources"] or "[]")}
+                if "license" in version.keys() and version["license"]:
+                    used["license"] = version["license"]
+                versions_used.append(used)
                 for row in filled:
                     entry = by_location.setdefault(row["location_id"], {})
                     entry[lang] = row["text"]
@@ -330,7 +338,7 @@ class Corpus:
             f"FROM {table} f JOIN segments s ON s.id = f.rowid JOIN locations l ON l.id = s.location_id "
             f"JOIN versions v ON v.id = s.version_id LEFT JOIN works w ON w.title = v.title "
             f"WHERE {table} MATCH ?{where} ORDER BY f.rank LIMIT ?", params + [limit * 3]).fetchall()
-        needle = normalize_for_search(query).split()
+        needle = search_words(query)
         seen, results = set(), []
         for row in rows:
             if row["ref"] in seen or (mode == "hebrew" and not hebrew_words_present(row["text"], needle, exact_phrase)):
@@ -342,7 +350,7 @@ class Corpus:
         return results
 
     def find_quote(self, quote: str, limit: int = 20) -> list[dict]:
-        words = normalize_for_search(quote).split()
+        words = search_words(quote)
         candidates = [{**r, "match": "exact"} for r in self.search(quote, exact_phrase=True, limit=MAX_QUOTE_MATCHES)]
         if not candidates and len(words) >= 12:
             for label, part in (("opening words", words[:8]), ("closing words", words[-8:])):
@@ -370,7 +378,7 @@ class Corpus:
             return report
         candidates = self.profile.languages_for(quote)
         lang = next((l for l in candidates if any(l in s for s in passage["segments"])), candidates[0])
-        wanted_words = normalize_for_search(quote).split()
+        wanted_words = search_words(quote)
         units = [(segment["ref"], position, word) for segment in passage["segments"]
                  for position, word in word_units(segment.get(lang, ""))]
         span = find_words([(i, word) for i, (_, _, word) in enumerate(units)], wanted_words, self.spelling_fold(lang))
@@ -389,7 +397,7 @@ class Corpus:
                             f"Name that version when quoting, and count words in it for {found['cite_as']}."}
         best_ratio, best_ref = 0.0, passage["segments"][0]["ref"]
         for segment in passage["segments"]:
-            ratio = best_window_ratio(wanted_words, normalize_for_search(segment.get(lang, "")).split())
+            ratio = best_window_ratio(wanted_words, search_words(segment.get(lang, "")))
             if ratio > best_ratio:
                 best_ratio, best_ref = ratio, segment["ref"]
         report.update(quote_found=False, closest_similarity=round(best_ratio, 3), closest_at=best_ref,
@@ -477,6 +485,10 @@ class Corpus:
         failed = [r.get("ref") or c.get("ref") for c, r in zip(citations, results)
                   if not r.get("ref_exists") or (c.get("quote") and not r.get("quote_found"))]
         return {"all_verified": not failed, "failed": failed, "build": self.build_id, "results": results}
+
+    @cached_property
+    def version_columns(self) -> set[str]:
+        return {row[1] for row in self.db.execute("PRAGMA table_info(versions)")}
 
     def has_table(self, name: str) -> bool:
         return self.db.execute("SELECT 1 FROM sqlite_master WHERE name = ?", (name,)).fetchone() is not None
@@ -598,9 +610,10 @@ class Corpus:
     def work_details(self, title: str) -> dict:
         resolved_title = self.resolve(title).title
         work = self.work(resolved_title)
-        work["versions"] = [dict(r) for r in self.db.execute(
-            "SELECT lang, version_title, version_source, segment_count, priority FROM versions WHERE title = ? "
-            "ORDER BY lang DESC, priority", (resolved_title,))]
+        columns = "lang, version_title, version_source, segment_count, priority" + (
+            ", license" if "license" in self.version_columns else "")
+        work["versions"] = [{k: v for k, v in dict(r).items() if v is not None or k != "license"} for r in self.db.execute(
+            f"SELECT {columns} FROM versions WHERE title = ? ORDER BY lang DESC, priority", (resolved_title,))]
         work["sections"] = [
             {"base": r["base"], "he": r["he_base"], "section_names": json.loads(r["section_names"])}
             for r in self.db.execute("SELECT * FROM nodes WHERE title = ? ORDER BY position LIMIT 200", (resolved_title,))]
@@ -700,7 +713,7 @@ def describe_match(quote: str, matched: list[tuple[str, int, str]], segments: li
         start = first_word if ref == first_ref else 1
         end = last_word if ref == last_ref else len(words_by_ref[ref])
         original += words_by_ref[ref][start - 1:end]
-    literal = normalize_for_search(quote) == " ".join(word for _, _, word in matched)
+    literal = search_words(quote) == [word for _, _, word in matched]
     return {
         "match": ("exact" if literal else PREFIX_VARIANT_MATCH) + (", spans segments" if first_ref != last_ref else ""),
         "at": first_ref, "cite_as": word_span_ref(first_ref, first_word, last_ref, last_word),

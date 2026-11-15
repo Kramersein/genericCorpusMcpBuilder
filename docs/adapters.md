@@ -19,6 +19,25 @@ corpus-mcp build --source table --raw my-texts/ --data data-mine --option name="
 `language`, `author`, `date`, `levels` (`book.chapter.section`). `tei`: a subfolder per work holding its versions
 (original and translations), or one file per work.
 
+## The words used here, with one example
+
+Take the Gospel of John in Greek, with a Latin and an English translation.
+
+| word | means | in the example |
+|---|---|---|
+| **work** | one text, whatever its versions | the Gospel of John |
+| **version** | one edition or translation of a work, in one language | the Greek SBLGNT, the Latin Vulgate, the Douay-Rheims |
+| **original** | the version in the language the work was written in (`language=` of the work); all others are translations | the Greek |
+| **segment** | the smallest citable piece of a version, with its text | John 1:14 in the Vulgate: "Et Verbum caro factum est..." |
+| **levels** | the names of the parts of a citation, outermost first | chapter, verse |
+| **labels** (`cite`) | a segment's position, one label per level | `["1", "14"]`, written `John 1:14` |
+| **separator** | what joins the labels in a citation | `:` (Perseus and most classics use `.`) |
+| **language code** | short code for a language; common ones are understood (`en`, `la`/`lat`, `grc`, `he`, `zh`, `lzh`, `ja`, `ru`, `ar`, ...) | `grc`, `lat`, `en` |
+| **corpus** | all the works one server serves | New Testament and church fathers |
+
+Every version of a work uses the same levels and labels, so `John 1:14` finds the Greek, the Latin and the English
+at once. A translation may be divided differently (fewer, longer segments); it is still placed by its labels.
+
 ## Your own adapter in five minutes
 
 ```sh
@@ -30,7 +49,7 @@ corpus-mcp serve --data data-my_texts
 The template runs as it is. An adapter is a Python file or folder with up to two functions:
 
 ```python
-from genericCorpusMcpBuilder.sources.kit import SimpleCorpus
+from genericCorpusMcpBuilder import SimpleCorpus
 
 def fetch(raw, **options):           # optional: download into raw/ (leave out for local files, given with --raw)
     ...
@@ -45,8 +64,82 @@ def convert(raw, out, **options):    # required: read raw/, write the corpus dir
     corpus.finish(profile_dir=Path(__file__).parent)  # profile.json, instructions.md, answer_prompt.md if present
 ```
 
-`--option KEY=VALUE` values arrive as keyword arguments of both functions. `genericCorpusMcpBuilder.sources.http.download(url,
-path)` downloads resumably; `genericCorpusMcpBuilder.sources.tei.read_tei(path)` reads a TEI edition into segments.
+`--option KEY=VALUE` values arrive as keyword arguments of both functions. Helpers, all importable from
+`genericCorpusMcpBuilder`: `download(url, path)` (resumable), `html_to_text(html)`, `read_tei(path)` (a TEI edition
+into segments), `read_usfx(path)` (a USFX Bible), `language_code(code)`.
+
+`corpus.text()` takes segments as `(cite, text)` tuples, dicts or a pandas DataFrame (`cite=`, `text=`, `notes=` name
+the columns); a cite can be a list of labels, a string like `"1.14"` or a number.
+
+Look at what you built without setting up an AI client:
+
+```sh
+corpus-mcp show "Genesis 1:1" --data data-my_texts          # the passage in every language, with its versions
+corpus-mcp search "beginning" --data data-my_texts
+corpus-mcp check data-my_texts/corpus                        # problems in what the adapter wrote
+```
+
+### Recipes
+
+**A spreadsheet or DataFrame** (one row per segment):
+
+```python
+import pandas as pd
+from genericCorpusMcpBuilder import SimpleCorpus
+
+def convert(raw, out, **options):
+    corpus = SimpleCorpus(out, id="sayings", name="Sayings", original_language="la")
+    df = pd.read_csv(raw / "sayings.csv")                       # columns: book, number, latin, english
+    df["ref"] = df["book"].astype(str) + "." + df["number"].astype(str)
+    work = corpus.work("Sayings", levels=["book", "number"], language="la")
+    corpus.text(work, "la", "Latin text", df, cite="ref", text="latin")
+    corpus.text(work, "en", "My translation", df, cite="ref", text="english")
+    corpus.finish()
+```
+
+**A folder of plain-text files**, one per chapter, one verse per line:
+
+```python
+for path in sorted(raw.glob("*.txt")):                          # 01.txt, 02.txt, ...
+    chapter = str(int(path.stem))
+    lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    corpus.text(work, "en", "My edition", [([chapter, str(n)], line) for n, line in enumerate(lines, 1)])
+```
+
+(Call `text()` once per version with all its segments: collect them in a list first if they come from several files.)
+
+**A JSON file**:
+
+```python
+import json
+data = json.loads((raw / "book.json").read_text(encoding="utf-8"))    # {"chapters": [{"verses": ["...", ...]}, ...]}
+segments = [([str(c), str(v)], text) for c, chapter in enumerate(data["chapters"], 1)
+            for v, text in enumerate(chapter["verses"], 1)]
+corpus.text(work, "en", "JSON edition", segments)
+```
+
+**Web pages**: download them in `fetch()` and read them in `convert()`:
+
+```python
+from genericCorpusMcpBuilder import download, html_to_text
+
+def fetch(raw, **options):
+    for n in range(1, 13):
+        download(f"https://example.org/book/{n}.html", raw / f"{n:02d}.html")
+
+def convert(raw, out, **options):
+    ...
+    for path in sorted(raw.glob("*.html")):
+        paragraphs = html_to_text(path.read_text(encoding="utf-8")).splitlines()
+        corpus.text(...)   # or collect, then one text() per version
+```
+
+Check a site's terms before downloading it, and keep the license in `SimpleCorpus(license=...)` and, where it
+differs per version, `corpus.text(..., license="...")`.
+
+**Chinese, Japanese and other scripts**: nothing special to do; give the right language code (`zh`, `lzh` for
+classical Chinese, `ja`, `ko`, `ru`, `ar`, `sa`, ...). Chinese characters and Japanese kana count as one unit each
+for search, quotes and word citations (`論語 1.1@3-7`), since those languages do not separate words with spaces.
 
 ### What SimpleCorpus does for you
 

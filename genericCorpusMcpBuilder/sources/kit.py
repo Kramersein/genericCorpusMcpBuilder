@@ -14,9 +14,12 @@ A minimal adapter (see docs/adapters.md):
         corpus.text(work, "la", "Skutella 1934", [(["1", "1", "1"], "Magnus es, domine..."), ...])
         corpus.finish()
 """
+import difflib
+import html
 import json
 import re
 import shutil
+from html.parser import HTMLParser
 from pathlib import Path
 
 from genericCorpusMcpBuilder.corpus_format import CorpusWriter, TextWriter, text_file_name
@@ -44,6 +47,71 @@ def level_kind(labels) -> str | None:
     if all(FOLIO.match(label) for label in labels):
         return "folio"
     return "label"
+
+
+def rows(segments, cite: str = "cite", text: str = "text", notes: str = "notes"):
+    """(cite, text, notes) from tuples, dicts or a pandas DataFrame (anything with to_dict("records"))."""
+    if hasattr(segments, "to_dict"):
+        segments = segments.to_dict("records")
+    for item in segments:
+        if isinstance(item, dict):
+            missing = [name for name in (cite, text) if name not in item]
+            if missing:
+                raise ValueError(f"a segment has no {' or '.join(map(repr, missing))} (it has {sorted(item)}); "
+                                 f"name the columns with cite=..., text=...")
+            yield item[cite], item[text], item.get(notes) or ""
+        else:
+            item = list(item)
+            if len(item) < 2:
+                raise ValueError(f"a segment must be (cite, text) or (cite, text, notes), not {item!r}")
+            yield item[0], item[1], item[2] if len(item) > 2 else ""
+
+
+def cite_labels(value, separator: str, where: str) -> list[str]:
+    """["1", "3"] from ["1", "3"], (1, 3), "1.3" (at the separator) or 3; 3.0 from a spreadsheet becomes "3"."""
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    if isinstance(value, int):
+        labels = [str(value)]
+    elif isinstance(value, str):
+        labels = value.strip().split(separator)
+    elif isinstance(value, (list, tuple)):
+        labels = [str(int(v)) if isinstance(v, float) and v.is_integer() else str(v).strip() for v in value]
+    else:
+        raise ValueError(f"{where}: a cite must be labels (a list), a string or a number, not {value!r}")
+    if not labels or not all(labels):
+        raise ValueError(f"{where}: empty label in cite {value!r}")
+    return labels
+
+
+class _TextOnly(HTMLParser):
+    BLOCKS = {"p", "div", "br", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "section"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts, self.skipping = [], 0
+
+    def handle_starttag(self, tag, attrs):
+        self.skipping += tag in ("script", "style")
+        if tag in self.BLOCKS:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        self.skipping -= tag in ("script", "style") and self.skipping > 0
+        if tag in self.BLOCKS:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        if not self.skipping:
+            self.parts.append(data)
+
+
+def html_to_text(markup: str) -> str:
+    """The text of an HTML page or fragment: tags, scripts and styles dropped, one line per paragraph or line break."""
+    parser = _TextOnly()
+    parser.feed(markup)
+    lines = (re.sub(r"[ \t\r\f\v]+", " ", line).strip() for line in html.unescape("".join(parser.parts)).split("\n"))
+    return "\n".join(line for line in lines if line)
 
 
 class LevelKinds:
@@ -102,11 +170,23 @@ class SimpleCorpus:
             self.cites[name] = set()
         return name
 
-    def text(self, work: str, lang: str, title: str, segments, *, source: str | None = None, rank: int | None = None,
-             **extra) -> int:
-        """One version of a work: segments are (cite, text) or (cite, text, notes) in reading order, cite a list of
-        labels (or a string split at the work's separator). Returns the number of segments written."""
-        lang = language_code(lang)
+    def text(self, work: str, lang: str | None = None, title: str | None = None, segments=None, *,
+             language: str | None = None, source: str | None = None, rank: int | None = None,
+             cite: str = "cite", text: str = "text", notes: str = "notes", **extra) -> int:
+        """One version (an edition or a translation) of a work, its segments in reading order. segments can be
+        - (cite, text) or (cite, text, notes) tuples,
+        - dicts, or a pandas DataFrame, with "cite", "text" and optionally "notes" (other names: cite=, text=, notes=).
+        A cite is the labels: a list (["1", "3"]), a string split at the work's separator ("1.3"), or a number (3).
+        lang (or language=) is the version's language code. Returns the number of segments written."""
+        lang = language_code(lang or language)
+        if work not in self.works:
+            close = difflib.get_close_matches(work, list(self.works), n=3)
+            raise ValueError(f"no work {work!r}: add it with corpus.work(...) first, and pass the name it returns"
+                             + (f" (did you mean {', '.join(map(repr, close))}?)" if close else ""))
+        if not title:
+            raise ValueError(f"text() for {work!r} needs a title: the name of this edition or translation")
+        if segments is None:
+            raise ValueError(f"text() for {work!r} needs segments: a list of (cite, text) or a DataFrame")
         if lang not in self.languages:
             self.languages.append(lang)
         info, kinds = self.works[work], self.kinds[work]
@@ -117,18 +197,17 @@ class SimpleCorpus:
         path = self.writer.text_path(text_file_name(self.sequence, work, lang, title))
         self.sequence += 1
         with TextWriter(path, header) as out:
-            for segment in segments:
-                cite, text, notes = (list(segment) + [""])[:3]
-                cite = cite.split(info["separator"]) if isinstance(cite, str) else [str(label) for label in cite]
-                if not text or not text.strip():
+            for number, (labels, body, note) in enumerate(rows(segments, cite, text, notes), 1):
+                labels = cite_labels(labels, info["separator"], f"{work} ({title}), segment {number}")
+                if not isinstance(body, str) or not body.strip():
                     continue
-                while len(kinds) < len(cite):
+                while len(kinds) < len(labels):
                     kinds.append(LevelKinds())
-                for kind, label in zip(kinds, cite):
+                for kind, label in zip(kinds, labels):
                     kind.add(label)
                 if work in self.cites:
-                    self.cites[work].add(tuple(cite))
-                out.segment(work, cite, text.strip(), notes or "")
+                    self.cites[work].add(tuple(labels))
+                out.segment(work, labels, body.strip(), note if isinstance(note, str) else "")
                 count += 1
         return count
 

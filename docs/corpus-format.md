@@ -194,7 +194,7 @@ corpus-specific tools. `genericCorpusMcpBuilder/sources/sefaria/profile.json` is
 
 | key | |
 |---|---|
-| `languages` | per language: display `name`; `script` it is written in (`latin`, `greek`, `hebrew`, `arabic`, `syriac`), used to tell which language a query or quote is in; `search`: `plain` (default; accents ignored), `english` (also stems English words), `hebrew` (also ignores prefix letters ו/ה/ב/כ/ל/מ/ש/ד and -ים/-ין) |
+| `languages` | per language: display `name`; `script` it is written in (`latin`, `greek`, `coptic`, `hebrew`, `arabic`, `syriac`, `cyrillic`, `armenian`, `georgian`, `ethiopic`, `devanagari`, `tibetan`, `thai`, `han`, `japanese`, `hangul`), used to tell which language a query or quote is in; common language codes get the right script and search mode by themselves; `search`: `plain` (default; accents ignored), `english` (also stems English words), `latin` (also folds u/v, i/j), `hebrew` (also ignores prefix letters ו/ה/ב/כ/ל/מ/ש/ד and -ים/-ין), `cjk` (Chinese and Japanese: each character or kana is a unit; queries match character sequences) |
 | `eras` | the era codes works use, earliest first, with readable names; used to order works without dates |
 | `periods` | date ranges (`until` = last year, inclusive) to group results by when `research.group_by` is `date` |
 | `strata` | named layers of the tradition, in order; the last one also takes works no rule matches |
@@ -224,7 +224,8 @@ passage to earlier sources and later works, limited to works in `categories`.
 `embedding`: which works semantic search covers. `title_prefixes` are always included; otherwise base texts (not
 commentaries) whose main category is in `base_text_categories` or whose categories start with one of
 `category_paths` (all base texts if neither is set). Each work is embedded in its primary translation when that
-covers at least `translation_coverage` (0.8) of the original, else in the original.
+covers at least `translation_coverage` (0.8) of the original, else in the original. With several translations,
+`prefer_languages` (e.g. `["en"]`) says which to use first; the model handles English best.
 
 ## Writing an adapter
 

@@ -10,6 +10,7 @@ One server serves one corpus. Built in:
 |---|---|---|
 | [Sefaria](https://www.sefaria.org) | Tanakh, Mishnah, Talmud, Midrash, codes with their commentaries, responsa; Sefaria's link graph and topics | `--source sefaria` |
 | [Perseus](https://github.com/PerseusDL) | Greek and Latin literature with English translations | `--source perseus` |
+| New Testament and church fathers | the Greek New Testament (SBLGNT) with the Vulgate and an English Bible; Greek and Latin fathers from [Open Greek and Latin](https://github.com/OpenGreekAndLatin) | `--source church` |
 | your TEI editions | a folder of TEI XML files | `--source tei --raw DIR` |
 | your tables | CSV/TSV, one row per segment | `--source table --raw DIR` |
 | anything else | write an adapter: `corpus-mcp new-adapter NAME` | [docs/adapters.md](docs/adapters.md) |
@@ -118,6 +119,19 @@ Dates are approximate (by author) and only order the results. Problems in Perseu
 the build and worked around where possible (a translation whose citation pattern matches nothing is read from its
 milestones; a citation repeated in one file keeps its first text).
 
+### New Testament and church fathers
+
+```sh
+uv run corpus-mcp build --source church --data /srv/church-data                    # a starting set, ~1 minute
+uv run corpus-mcp build --source church --data /srv/church-data --option fathers=stoa0040,tlg2018
+```
+
+Each work keeps its own original language: the New Testament is Greek (SBLGNT) with the Clementine Vulgate and the
+Douay-Rheims (or `--option english=web`, the World English Bible) as translations; the fathers are Greek
+(First1KGreek) or Latin (CSEL). `fathers` takes CTS author ids (`tlg1443` Ignatius, `stoa0040` Augustine) or work
+ids, `none` for the Bible only. Everything is openly licensed (SBLGNT CC BY 4.0, Open Greek and Latin CC BY-SA 4.0,
+the Bibles public domain), so a built corpus can be shared under CC BY-SA 4.0 with the credits in `about_corpus`.
+
 ## Install and run (with uv)
 
 Needs [uv](https://docs.astral.sh/uv/) and Linux x86_64 (the lockfile targets that platform; elsewhere use Docker).
@@ -135,7 +149,8 @@ uv run corpus-mcp serve --data /srv/sefaria-data                  # http://127.0
 ```
 
 `corpus-mcp build --skip-fetch` rebuilds from an existing `raw/` download; `--raw DIR` keeps the download elsewhere.
-`python -m genericCorpusMcpBuilder ...` is the same as `corpus-mcp ...`.
+`python -m genericCorpusMcpBuilder ...` is the same as `corpus-mcp ...`. `corpus-mcp show "John 1:1" --data DIR` and
+`corpus-mcp search WORDS --data DIR` print passages and search results without an MCP client.
 
 ### Connect a client
 

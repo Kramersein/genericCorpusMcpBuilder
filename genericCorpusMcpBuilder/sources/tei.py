@@ -29,6 +29,7 @@ class TeiText:
     title: str = ""
     author: str = ""
     language: str = ""                                        # as written in the file (xml:lang)
+    license: str = ""                                         # the header's availability/licence statement
 
 
 def qualified(tag: str) -> str:
@@ -183,5 +184,9 @@ def read_tei(path: Path, report=print) -> TeiText | None:
         if segments:
             report(f"{path.name}: {unit} read from milestones (its citation pattern matches nothing)")
     stmt = f"{TEI}teiHeader/{TEI}fileDesc/{TEI}titleStmt/"
+    licence = root.find(f".//{TEI}availability/{TEI}licence")
+    license = " ".join(filter(None, [header_value(root, f".//{TEI}availability/{TEI}licence"),
+                                     licence.get("target") if licence is not None else ""]))
     return TeiText(path, level_names, segments, split_schemes, title=header_value(root, stmt + f"{TEI}title"),
-                   author=header_value(root, stmt + f"{TEI}author"), language=text_language(root))
+                   author=header_value(root, stmt + f"{TEI}author"), language=text_language(root),
+                   license=license or header_value(root, f".//{TEI}availability"))

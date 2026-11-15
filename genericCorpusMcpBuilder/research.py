@@ -216,18 +216,21 @@ class Researcher:
         return [c for c in pool if id(c) not in rejected] + candidates[RERANK_POOL:]
 
     def choose(self, candidates: list[Candidate], limit: int) -> list[Candidate]:
+        """Up to limit sources: first the profile's reserved places (e.g. 2 from the Shulchan Arukh), then the best of
+        the rest, at most MAX_SOURCES_PER_WORK from one work and none overlapping."""
         chosen, per_work = [], {}
         for stratum, reserved in self.settings["reserve"].items():
             for candidate in [c for c in candidates if self.stratum_id(c.title) == stratum][:reserved]:
-                chosen.append(candidate)
-                per_work[candidate.title] = per_work.get(candidate.title, 0) + 1
+                if len(chosen) < limit:
+                    chosen.append(candidate)
+                    per_work[candidate.title] = per_work.get(candidate.title, 0) + 1
         for candidate in candidates:
+            if len(chosen) >= limit:
+                break
             if any(c.overlaps(candidate) for c in chosen) or per_work.get(candidate.title, 0) >= MAX_SOURCES_PER_WORK:
                 continue
             chosen.append(candidate)
             per_work[candidate.title] = per_work.get(candidate.title, 0) + 1
-            if len(chosen) == limit:
-                break
         return chosen
 
     def describe(self, candidate: Candidate, excerpt_chars: int) -> dict:

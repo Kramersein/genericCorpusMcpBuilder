@@ -7,17 +7,32 @@ import urllib.parse
 
 SCRIPT_LETTERS = {
     "hebrew": re.compile(r"[֐-׿יִ-ﭏ]"),
-    "greek": re.compile(r"[Ͱ-Ͽἀ-῿]"),
-    "arabic": re.compile(r"[؀-ۿ]"),
+    "greek": re.compile(r"[Ͱ-ϡϰ-Ͽἀ-῿]"),
+    "coptic": re.compile(r"[Ⲁ-⳿Ϣ-ϯ]"),
+    "arabic": re.compile(r"[؀-ۿݐ-ݿ]"),
     "syriac": re.compile(r"[܀-ݏ]"),
+    "cyrillic": re.compile(r"[Ѐ-ԯⷠ-ⷿꙀ-ꚟ]"),
+    "armenian": re.compile(r"[԰-֏]"),
+    "georgian": re.compile(r"[Ⴀ-ჿⴀ-⴯]"),
+    "ethiopic": re.compile(r"[ሀ-᎟ⶀ-⷟]"),
+    "devanagari": re.compile(r"[ऀ-ॿ]"),
+    "tibetan": re.compile(r"[ༀ-࿿]"),
+    "thai": re.compile(r"[฀-๿]"),
+    "han": re.compile(r"[㐀-䶿一-鿿豈-﫿\U00020000-\U0003134F]"),
+    "japanese": re.compile(r"[぀-ヿㇰ-ㇿ]"),      # kana; Japanese text also uses han
+    "hangul": re.compile(r"[가-힯ᄀ-ᇿ㄰-㆏]"),
     "latin": re.compile(r"[A-Za-zÀ-ɏ]"),
 }
+# A query in one script may be in a language written with another: Chinese characters are also Japanese.
+SCRIPT_ALSO_USED_BY = {"han": ["japanese"], "japanese": ["han"]}
 # How a language's text is indexed. "hebrew" also strips prefix letters (ו/ה/ב/כ/ל/מ/ש/ד) and unifies -ים/-ין.
 SEARCH_MODES = {
     "hebrew": "tokenize='unicode61 remove_diacritics 0', prefix='2 3 4'",
     "english": "tokenize='porter unicode61 remove_diacritics 2'",
     "plain": "tokenize='unicode61 remove_diacritics 2'",
     "latin": "tokenize='unicode61 remove_diacritics 2'",   # also folds v/u and j/i
+    # Chinese and Japanese, written without spaces: indexed character by character, searched as character sequences
+    "cjk": "tokenize='unicode61 remove_diacritics 0'",
 }
 # Defaults for common language codes (ISO 639-1/-3); a profile's "languages" overrides them.
 KNOWN_LANGUAGES = {
@@ -35,6 +50,26 @@ KNOWN_LANGUAGES = {
     "ara": {"name": "Arabic", "script": "arabic"},
     "syc": {"name": "Syriac", "script": "syriac"},
     "syr": {"name": "Syriac", "script": "syriac"},
+    "cop": {"name": "Coptic", "script": "coptic"},
+    "ru": {"name": "Russian", "script": "cyrillic"},
+    "rus": {"name": "Russian", "script": "cyrillic"},
+    "cu": {"name": "Church Slavonic", "script": "cyrillic"},
+    "chu": {"name": "Church Slavonic", "script": "cyrillic"},
+    "hy": {"name": "Armenian", "script": "armenian"},
+    "xcl": {"name": "Classical Armenian", "script": "armenian"},
+    "ka": {"name": "Georgian", "script": "georgian"},
+    "gez": {"name": "Ge'ez", "script": "ethiopic"},
+    "am": {"name": "Amharic", "script": "ethiopic"},
+    "sa": {"name": "Sanskrit", "script": "devanagari"},
+    "hi": {"name": "Hindi", "script": "devanagari"},
+    "bo": {"name": "Tibetan", "script": "tibetan"},
+    "th": {"name": "Thai", "script": "thai"},
+    "zh": {"name": "Chinese", "script": "han", "search": "cjk"},
+    "lzh": {"name": "Classical Chinese", "script": "han", "search": "cjk"},
+    "ja": {"name": "Japanese", "script": "japanese", "search": "cjk"},
+    "jpn": {"name": "Japanese", "script": "japanese", "search": "cjk"},
+    "ko": {"name": "Korean", "script": "hangul"},
+    "kor": {"name": "Korean", "script": "hangul"},
 }
 DEFAULT_NEXT_STEPS = [
     "Read the most relevant sources in full with get_text(ref, context=2) before relying on them.",
@@ -116,7 +151,7 @@ class Profile:
         }
         self.trace = self.settings.get("trace")
         self.embedding = {"title_prefixes": [], "base_text_categories": None, "category_paths": [],
-                          "translation_coverage": 0.8, **(self.settings.get("embedding") or {})}
+                          "translation_coverage": 0.8, "prefer_languages": [], **(self.settings.get("embedding") or {})}
         self.tool_descriptions = self.settings.get("tool_descriptions") or {}
         self.citation_scheme_preference = self.settings.get("citation_scheme_preference") or []
         self.source_url_template = self.settings.get("source_url")
@@ -142,8 +177,13 @@ class Profile:
     def languages_for(self, text: str) -> list[str]:
         """The corpus languages written in the script that dominates text (several if they share it)."""
         counts = {script: len(pattern.findall(text)) for script, pattern in SCRIPT_LETTERS.items()}
+        if counts["japanese"]:                      # any kana makes it Japanese, however many kanji it has
+            counts["japanese"] += counts.pop("han")
         script = max(counts, key=counts.get) if any(counts.values()) else "latin"
         matching = [c for c, lang in self.languages.items() if lang["script"] == script]
+        if not matching:
+            matching = [c for c, lang in self.languages.items()
+                        if lang["script"] in SCRIPT_ALSO_USED_BY.get(script, [])]
         return matching or [next((c for c in self.languages if c not in self.original_languages),
                                  self.original_language)]
 
