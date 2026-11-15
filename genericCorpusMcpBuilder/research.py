@@ -98,8 +98,11 @@ class Researcher:
         return candidates
 
     def matching_topics(self, question: str, key_terms: list[str]) -> list[dict]:
-        by_words = [{**t, "matched_by": "words"}
-                    for t in self.corpus.match_topics(" ".join([question] + key_terms), KEYWORD_TOPICS)]
+        # key terms are matched as phrases (a single common word inside one is not a topic); the question by words
+        by_terms = self.corpus.topics_for_terms(key_terms, KEYWORD_TOPICS)
+        by_question = self.corpus.match_topics(question, KEYWORD_TOPICS)
+        merged_words = {t["slug"]: t for t in by_terms + by_question}
+        by_words = [{**t, "matched_by": "words"} for t in list(merged_words.values())[:KEYWORD_TOPICS]]
         if not self.semantic or getattr(self.semantic, "topic_vectors", None) is None:
             return by_words
         ranked = self.semantic.search_topics(question, limit=5)

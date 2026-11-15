@@ -53,7 +53,8 @@ def test_find_quote_reaches_the_talmudic_source(corpus):
 
 def test_trace_reaches_the_rambam(corpus):
     earlier = corpus.trace("Shulchan Arukh, Orach Chayim 308:1", 1, corpus.profile.trace["categories"])["earlier_sources"]
-    assert any(e["to"].startswith("Mishneh Torah, Sabbath") for e in earlier)
+    rambam = next(w for w in earlier if w["work"].startswith("Mishneh Torah, Sabbath"))
+    assert rambam["passages"][0]["ref"].startswith("Mishneh Torah, Sabbath") and rambam["links"] >= 1
 
 
 def test_manifest_records_word_numbering_rule(corpus):

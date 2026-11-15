@@ -1,8 +1,10 @@
 [project]
 name = "genericCorpusMcpBuilder"
 version = "0.1.0"
-description = "MCP server over an indexed Sefaria corpus for source-verified halakhic research"
+description = "Build an MCP server over a corpus of texts: cited the way readers cite them, quotes verified against the source"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "mcp>=1.20",
     "numpy>=1.26",

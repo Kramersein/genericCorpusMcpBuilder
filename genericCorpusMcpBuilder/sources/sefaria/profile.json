@@ -266,7 +266,7 @@
       "Halakhah",
       "Responsa"
     ],
-    "description": "Follow a law through the link graph: from a ref to its earlier sources (Torah, Mishnah, Talmud) and its later\ncodification (Rambam, Tur, Shulchan Arukh, Acharonim), split by era and date. depth 1-3."
+    "description": "Follow a law through the link graph: from a ref to its earlier sources (Torah, Mishnah, Talmud) and its later\ncodification (Rambam, Tur, Shulchan Arukh, Acharonim), grouped by work and earliest first: each work with how many of its passages are linked, the link types and up to 3 of those passages. depth 1-3."
   },
   "embedding": {
     "title_prefixes": [

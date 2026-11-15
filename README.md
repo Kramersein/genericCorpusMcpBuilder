@@ -293,3 +293,12 @@ uv run pytest                                   # integration tests use ./data/c
 ```
 
 See `playground/README.md` for a terminal chat with a local model that calls these tools.
+
+## License
+
+The code is under the [MIT License](LICENSE). The texts are not part of this repository: the adapters download
+them from their sources, and a built corpus (the data directory) carries the texts' own licenses, not MIT. Sefaria's
+texts are licensed per version (public domain, CC BY, CC BY-SA, CC BY-NC and others; `get_work_info` shows a
+version's source), the Perseus texts are CC BY-SA 4.0, and the embedding model (BAAI/bge-m3) is MIT. Check those
+before redistributing a built corpus or running a public server over it.
+

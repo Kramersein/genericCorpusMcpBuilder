@@ -19,6 +19,8 @@ MAX_QUOTE_MATCHES = 2000
 LONG_LINK_SPAN = 500
 PREFIX_VARIANT_MATCH = "same words apart from prefix letters (ו/ה/ב/כ/ל/מ/ש/ד) or -ים/-ין"
 UNKNOWN_ERA_RANK = 9
+TRACE_MAX_WORKS = 25
+TRACE_PASSAGES_PER_WORK = 3
 CLOSE_LABEL_CUTOFF = 0.85
 STOPWORDS = set("""a an and are as at be but by can could did do does for from had has have how i if in into is it its
 may me might must my no not of on or our shall should so than that the their them then there these they this to
@@ -376,6 +378,15 @@ class Corpus:
             matched = units[span[0]:span[1] + 1]
             return {**report, "quote_found": True, **describe_match(
                 quote, matched, passage["segments"], lang, self.counted_in(lang, passage["work"]["title"]))}
+        other = self.quote_in_other_versions(ref, passage, lang, wanted_words)
+        if other:
+            version, segments, matched = other
+            default = next((v["version_title"] for v in passage["versions"] if v["lang"] == lang), None)
+            found = describe_match(quote, matched, segments, lang,
+                                   f"{self.counted_in(lang, passage['work']['title'])} {version!r}")
+            return {**report, "quote_found": True, **found, "version": version,
+                    "note": f"not in the default {lang} version ({default}); found in {version}. "
+                            f"Name that version when quoting, and count words in it for {found['cite_as']}."}
         best_ratio, best_ref = 0.0, passage["segments"][0]["ref"]
         for segment in passage["segments"]:
             ratio = best_window_ratio(wanted_words, normalize_for_search(segment.get(lang, "")).split())
@@ -384,6 +395,31 @@ class Corpus:
         report.update(quote_found=False, closest_similarity=round(best_ratio, 3), closest_at=best_ref,
                       found_elsewhere=[r["ref"] for r in self.find_quote(quote, limit=10)])
         return report
+
+    def quote_in_other_versions(self, ref: str, passage: dict, lang: str, wanted_words: list[str]):
+        """A quote missing from the default translation may be in another version of that language (Genesis 1:1
+        "In the beginning" is in the KJV, not in the default JPS). Returns (version, segments, matched units)."""
+        if lang == self.original_of(passage["work"]["title"]):
+            return None
+        located = self.resolve(split_word_span(ref)[0])
+        if not located.exists:
+            return None
+        used = {v["version_title"] for v in passage["versions"] if v["lang"] == lang}
+        last = min(located.loc_end, located.loc_start + MAX_LOCATIONS_PER_REQUEST - 1)
+        for version in self.versions(located.title, lang, None):
+            if version["version_title"] in used:
+                continue
+            rows = self.db.execute(
+                "SELECT l.ref, s.text FROM segments s JOIN locations l ON l.id = s.location_id "
+                "WHERE s.version_id = ? AND s.location_id BETWEEN ? AND ? ORDER BY s.location_id",
+                (version["id"], located.loc_start, last)).fetchall()
+            segments = [{"ref": r["ref"], lang: r["text"]} for r in rows]
+            units = [(s["ref"], position, word) for s in segments for position, word in word_units(s[lang])]
+            span = find_words([(i, word) for i, (_, _, word) in enumerate(units)], wanted_words,
+                              self.spelling_fold(lang))
+            if span:
+                return version["version_title"], segments, units[span[0]:span[1] + 1]
+        return None
 
     def links_for_range(self, loc_start: int, loc_end: int) -> list[dict]:
         found = {}
@@ -457,6 +493,27 @@ class Corpus:
             "ORDER BY score LIMIT ?", (" OR ".join(f'"{w}"' for w in words), limit)).fetchall()
         return [dict(r) for r in rows]
 
+    def topics_for_terms(self, terms: list[str], limit: int = 5) -> list[dict]:
+        """Topics whose name and a key term overlap as a phrase covering most of both, so that the key term
+        כיבוד אב ואם finds Honoring Parents but its word אב alone does not find the month of Av."""
+        if not self.has_table("topics_fts"):
+            return []
+        found = {}
+        for term in terms:
+            words = [w for w in normalize_for_search(term).split() if w]
+            if not words:
+                continue
+            rows = self.db.execute(
+                "SELECT t.slug, t.en, t.he, t.description, t.source_count, f.names, "
+                "bm25(topics_fts, 0, 10.0, 1.0) AS score FROM topics_fts f JOIN topics t ON t.slug = f.slug "
+                "WHERE topics_fts MATCH ? ORDER BY score LIMIT 50",
+                ("names : (" + " OR ".join(f'"{w}"' for w in words) + ")",)).fetchall()
+            for row in rows:
+                names = [normalize_for_search(name).split() for name in (row["names"] or "").split(" ; ")]
+                if row["slug"] not in found and any(phrases_overlap(words, name) for name in names if name):
+                    found[row["slug"]] = {k: row[k] for k in ("slug", "en", "he", "description", "source_count", "score")}
+        return sorted(found.values(), key=lambda t: t["score"])[:limit]
+
     def topic(self, name: str) -> sqlite3.Row | None:
         if not self.has_table("topics"):
             return None
@@ -490,7 +547,8 @@ class Corpus:
         found.sort(key=lambda f: f["other_start"])
         return [{key: f[key] for key in ("other", "other_title", "category", "link_type")} for f in found[:limit]]
 
-    def trace(self, ref: str, depth: int = 2, categories: list[str] | None = None, per_level: int = 60) -> dict:
+    def trace(self, ref: str, depth: int = 2, categories: list[str] | None = None, per_level: int = 60,
+              max_works: int = TRACE_MAX_WORKS, per_work: int = TRACE_PASSAGES_PER_WORK) -> dict:
         """Follow the link graph from a passage to earlier and later works (only works in categories, if given)."""
         root = self.resolve(ref)
         root_work = self.work(root.title)
@@ -513,13 +571,15 @@ class Corpus:
                     next_frontier.append((link["other"], link["other_start"], link["other_end"]))
             frontier = next_frontier[:per_level]
         edges.sort(key=lambda e: (e["composed"] is None, e["composed"] or 0))
-        return {
-            "root": root.ref, "root_work": root.title, "root_era": root_work.get("era_name"),
-            "root_composed": root_work.get("comp_date"), "build": self.build_id,
-            "earlier_sources": [e for e in edges if e["relation"] == "earlier"],
-            "later_works": [e for e in edges if e["relation"] == "later"],
-            "undated_or_contemporary": [e for e in edges if e["relation"] == "unknown"],
-        }
+        result = {"root": root.ref, "root_work": root.title, "root_era": root_work.get("era_name"),
+                  "root_composed": root_work.get("comp_date"), "build": self.build_id, "links_found": len(edges)}
+        for key, relation in (("earlier_sources", "earlier"), ("later_works", "later"),
+                              ("undated_or_contemporary", "unknown")):
+            works = group_by_work([e for e in edges if e["relation"] == relation], per_work)
+            result[key] = works[:max_works]
+            if len(works) > max_works:
+                result.setdefault("not_shown", {})[key] = f"{len(works) - max_works} more works"
+        return result
 
     def list_works(self, category: str | None = None, name_contains: str | None = None, limit: int = 100) -> list[dict]:
         filters, params = [], []
@@ -588,6 +648,30 @@ class Corpus:
         if root_rank and other_rank and root_rank != other_rank:
             return "earlier" if other_rank < root_rank else "later"
         return "unknown"
+
+
+def group_by_work(edges: list[dict], per_work: int) -> list[dict]:
+    """Links found by trace, one entry per work (earliest first) with how many passages and the first few."""
+    works: dict[str, dict] = {}
+    for edge in edges:
+        work = works.setdefault(edge["work"], {
+            "work": edge["work"], "category": edge["category"], "era": edge["era"], "composed": edge["composed"],
+            "links": 0, "link_types": [], "passages": []})
+        work["links"] += 1
+        if edge["link_type"] and edge["link_type"] not in work["link_types"]:
+            work["link_types"].append(edge["link_type"])
+        if len(work["passages"]) < per_work:
+            work["passages"].append({"ref": edge["to"], "from": edge["from"], "level": edge["level"]})
+    return list(works.values())
+
+
+def phrases_overlap(term: list[str], name: list[str]) -> bool:
+    """A topic name matches a key term if the whole term occurs in the name (הוצאה in a name about carrying out
+    between domains), or the name occurs in the term and covers more than half of it (not אב in כיבוד אב ואם).
+    Prefix letters and -ים/-ין are allowed."""
+    if len(term) <= len(name):
+        return find_words(list(enumerate(name, 1)), term) is not None
+    return 2 * len(name) > len(term) and find_words(list(enumerate(term, 1)), name) is not None
 
 
 def hebrew_words_present(text: str, needle: list[str], as_phrase: bool) -> bool:
