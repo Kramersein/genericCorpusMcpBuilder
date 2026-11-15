@@ -111,6 +111,33 @@ def default_language(manifest: dict) -> str:
     return manifest.get("original_language") or (manifest.get("languages") or ["en"])[0]
 
 
+def update_profile(db_path: Path, source: Path) -> None:
+    """Replace a built corpus's profile.json, instructions.md and answer_prompt.md (from the folder source) without
+    rebuilding: the text, and so the build id, stay the same. A file missing from source removes that setting."""
+    from genericCorpusMcpBuilder.check import Report, check_profile
+    db = sqlite3.connect(db_path)
+    meta = dict(db.execute("SELECT key, value FROM meta"))
+    report = Report()
+    check_profile(Path(source), json.loads(meta.get("languages") or "[]"), report)
+    if report.print():
+        raise SystemExit(f"{source}/profile.json has errors (above); nothing changed")
+    for key, name in PROFILE_FILES.items():
+        path = Path(source) / name
+        if path.exists():
+            value = path.read_text()
+            if key == "profile":
+                value = json.dumps(json.loads(value), ensure_ascii=False)
+            db.execute("INSERT OR REPLACE INTO meta VALUES (?,?)", (key, value))
+            print(f"updated {name}", flush=True)
+        elif key in meta:
+            db.execute("DELETE FROM meta WHERE key = ?", (key,))
+            print(f"removed {name} (not in {source}; the default applies)", flush=True)
+    db.execute("INSERT OR REPLACE INTO meta VALUES ('profile_updated_at', ?)",
+               (datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),))
+    db.commit()
+    db.close()
+
+
 def create_search_tables(db: sqlite3.Connection, profile: Profile) -> None:
     for lang in profile.languages:
         mode = profile.search_mode(lang)

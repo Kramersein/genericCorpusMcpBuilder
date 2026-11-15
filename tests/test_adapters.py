@@ -84,3 +84,17 @@ def test_check_reports_errors(tmp_path):
     corpus.finish()
     (out / "profile.json").write_text('{"strata": [{"id": "x"}], "stratum_rules": [{"stratum": "y"}]}')
     assert check(out) == 1                        # the unknown stratum; the repeated citation is only a warning
+
+
+def test_set_profile_replaces_instructions_without_rebuilding(tmp_path):
+    from genericCorpusMcpBuilder.build_corpus import update_profile
+    write_adapter("my_texts", tmp_path)
+    module = adapter(str(tmp_path / "my_texts"))
+    module.fetch(tmp_path / "raw")
+    before = built(tmp_path, module.convert)
+    (tmp_path / "new").mkdir()
+    (tmp_path / "new" / "instructions.md").write_text("New instructions.")
+    update_profile(tmp_path / "corpus.db", tmp_path / "new")
+    after = Corpus(str(tmp_path / "corpus.db"))
+    assert after.profile.instructions == "New instructions." and after.build_id == before.build_id
+    assert after.profile.languages["he"]["search"] == "hebrew"          # profile.json gone: defaults by language

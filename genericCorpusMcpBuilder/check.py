@@ -110,6 +110,30 @@ def check_text(path: Path) -> tuple[list[tuple], str | None]:
     return report.items(), original_of
 
 
+def check_profile(directory: Path, languages: list[str], report: Report) -> None:
+    """profile.json (if any): known keys, languages, search modes, scripts, strata named by the rules."""
+    if (directory / "profile.json").exists():
+        try:
+            profile = json.loads((directory / "profile.json").read_text())
+        except ValueError as error:
+            report.add("error", "profile.json is not valid JSON", str(error)[:80])
+            profile = {}
+        for key in profile:
+            if key not in PROFILE_KEYS:
+                report.add("warning", "unknown profile.json key (ignored)", key)
+        for code, settings in (profile.get("languages") or {}).items():
+            if code not in languages:
+                report.add("warning", "profile language not in corpus.json languages", code)
+            if settings.get("search", "plain") not in SEARCH_MODES:
+                report.add("error", "unknown search mode", f"{code}: {settings.get('search')}")
+            if settings.get("script", "latin") not in SCRIPT_LETTERS:
+                report.add("error", "unknown script", f"{code}: {settings.get('script')}")
+        strata = {s.get("id") for s in profile.get("strata") or []}
+        for rule in profile.get("stratum_rules") or []:
+            if rule.get("stratum") not in strata:
+                report.add("error", "stratum rule names an unknown stratum", str(rule.get("stratum")))
+
+
 def check(corpus: Path) -> int:
     """Prints what it finds; returns the number of errors."""
     corpus, report = Path(corpus), Report()
@@ -170,26 +194,7 @@ def check(corpus: Path) -> int:
                     report.add("warning", f"{name} ref does not start with a known part name (will be skipped)",
                                str(ref)[:60])
 
-    if (corpus / "profile.json").exists():
-        try:
-            profile = json.loads((corpus / "profile.json").read_text())
-        except ValueError as error:
-            report.add("error", "profile.json is not valid JSON", str(error)[:80])
-            profile = {}
-        for key in profile:
-            if key not in PROFILE_KEYS:
-                report.add("warning", "unknown profile.json key (ignored)", key)
-        for code, settings in (profile.get("languages") or {}).items():
-            if code not in languages:
-                report.add("warning", "profile language not in corpus.json languages", code)
-            if settings.get("search", "plain") not in SEARCH_MODES:
-                report.add("error", "unknown search mode", f"{code}: {settings.get('search')}")
-            if settings.get("script", "latin") not in SCRIPT_LETTERS:
-                report.add("error", "unknown script", f"{code}: {settings.get('script')}")
-        strata = {s.get("id") for s in profile.get("strata") or []}
-        for rule in profile.get("stratum_rules") or []:
-            if rule.get("stratum") not in strata:
-                report.add("error", "stratum rule names an unknown stratum", str(rule.get("stratum")))
+    check_profile(corpus, languages, report)
     errors = report.print()
     total = sum(1 for _ in files)
     print(f"checked {len(works)} works, {len(parts)} parts, {total} versions: "

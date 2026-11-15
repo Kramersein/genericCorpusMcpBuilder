@@ -82,6 +82,23 @@ def check_command(args: argparse.Namespace) -> None:
     raise SystemExit(1 if check_corpus(Path(args.corpus).expanduser().resolve()) else 0)
 
 
+def set_profile(args: argparse.Namespace) -> None:
+    from genericCorpusMcpBuilder.build_corpus import update_profile
+    from genericCorpusMcpBuilder.sources import ADAPTERS
+    directory = data_dir(args.data)
+    source = Path(args.source).expanduser()
+    if args.source in ADAPTERS:                       # an adapter's own profile files, e.g. sefaria
+        import importlib.util
+        source = Path(importlib.util.find_spec(ADAPTERS[args.source]).origin).parent
+    if not source.is_dir():
+        raise SystemExit(f"{args.source}: give an adapter name ({', '.join(ADAPTERS)}) or a folder with profile.json, "
+                         "instructions.md and/or answer_prompt.md")
+    update_profile(directory / "corpus.db", source)
+    print(f"done. Restart the server to use it (stop it before running this on a live corpus: it opens the database "
+          f"read-only and does not expect changes). If the research settings (strata, grouping) changed, also run "
+          f"python -m genericCorpusMcpBuilder.precompute {directory}/corpus.db {directory}/precomputed.db", flush=True)
+
+
 def new_adapter(args: argparse.Namespace) -> None:
     from genericCorpusMcpBuilder.scaffold import write_adapter
     write_adapter(args.name, Path(args.dir).expanduser().resolve())
@@ -119,6 +136,13 @@ def main() -> None:
     check_parser = commands.add_parser("check", help="check a corpus directory for problems before building it")
     check_parser.add_argument("corpus", help="the corpus directory (docs/corpus-format.md)")
     check_parser.set_defaults(handler=check_command)
+
+    profile_parser = commands.add_parser("set-profile", help="replace a built corpus's profile, instructions and "
+                                                             "answer prompt without rebuilding")
+    profile_parser.add_argument("source", help="an adapter name (sefaria, perseus) or a folder with profile.json, "
+                                               "instructions.md, answer_prompt.md")
+    profile_parser.add_argument("--data", help=f"the built data directory (default: $CORPUS_MCP_DATA or ./{DEFAULT_DATA})")
+    profile_parser.set_defaults(handler=set_profile)
 
     adapter_parser = commands.add_parser("new-adapter", help="write a working adapter template to start from")
     adapter_parser.add_argument("name", help="the adapter's name, e.g. my_texts")

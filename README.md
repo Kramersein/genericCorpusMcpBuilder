@@ -279,6 +279,19 @@ To build on a stronger machine and install on a smaller one (e.g. a NAS), build 
 copy the checkout, the data directory and the model cache across (`sh deploy/stage.sh <destination> [data dir]` does this), and run
 `install.sh` there.
 
+## Changing a corpus's instructions
+
+`profile.json`, `instructions.md` and `answer_prompt.md` are stored in `corpus.db` at build time. To try new ones
+without rebuilding, stop the server and run
+
+```sh
+corpus-mcp set-profile sefaria --data /srv/sefaria-data        # an adapter's files, or a folder with your own
+```
+
+then start it again. The texts and build id stay the same; it checks the profile first and changes nothing if it
+has errors. If the research settings changed (strata, grouping), also rerun
+`python -m genericCorpusMcpBuilder.precompute DATA/corpus.db DATA/precomputed.db`.
+
 ## Refresh
 
 Sefaria re-exports monthly. Run `corpus-mcp build` into a **new, empty** data directory, then point the server at it
